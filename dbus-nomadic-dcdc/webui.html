@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DC-DC Converter</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1b1f24; --muted: #667080; --line: #e1e4e8;
+    --accent: #1f6feb; --accent-text: #ffffff; --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e;
+    --bad-bg: #ffebe9; --warn-bg: #fff8c5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #8b949e; --line: #30363d;
+      --accent: #2f81f7; --accent-text: #ffffff; --ok: #3fb950; --warn: #d29922; --bad: #f85149;
+      --bad-bg: #3d1214; --warn-bg: #3a2d0b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .pill { padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; }
+  .pill.ok { background: var(--ok); color: #fff; }
+  .pill.bad { background: var(--bad); color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px; margin-bottom: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .big { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .row { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+  .row > :last-child { text-align: right; overflow-wrap: anywhere; }
+  .row span:first-child { color: var(--muted); }
+  #alarms { display: none; border-color: var(--bad); background: var(--bad-bg); margin-bottom: 12px; }
+  #alarms ul { margin: 0; padding-left: 20px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--card); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .seg button { flex: 1 1 140px; padding: 12px; font-weight: 600; }
+  .note { color: var(--muted); font-size: 13px; min-height: 18px; }
+  .set { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center;
+         padding: 10px 0; border-top: 1px solid var(--line); }
+  .set label { font-weight: 600; }
+  .set .hint { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+  .set .ctl { display: flex; gap: 6px; align-items: center; }
+  input[type=number] { width: 96px; font: inherit; padding: 7px 8px; border-radius: 8px;
+                       border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  #error { display: none; padding: 10px; border-radius: 8px; background: var(--bad-bg); color: var(--bad); margin-top: 10px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+  code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1 id="name">DC-DC converter</h1>
+      <div class="sub" id="sub">Nomadic D1 DC-DC converter</div>
+    </div>
+    <span class="pill bad" id="online">Connecting…</span>
+  </header>
+
+  <div class="card" id="alarms"><h2>Active alarms</h2><ul id="alarm-list"></ul></div>
+
+  <div class="grid">
+    <div class="card"><h2>LV side (12 V)</h2>
+      <div class="big" id="lv-v">—</div>
+      <div class="row"><span>Current</span><span id="lv-i">—</span></div>
+      <div class="row"><span>Power</span><span id="lv-p">—</span></div>
+    </div>
+    <div class="card"><h2>HV side (48 V)</h2>
+      <div class="big" id="hv-v">—</div>
+      <div class="row"><span>Current</span><span id="hv-i">—</span></div>
+      <div class="row"><span>Power</span><span id="hv-p">—</span></div>
+    </div>
+    <div class="card"><h2>Converter</h2>
+      <div class="big" id="temp">—</div>
+      <div class="row"><span>Mode</span><span id="mode">—</span></div>
+      <div class="row"><span>Precharge</span><span id="prech">—</span></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2>Control</h2>
+      <div class="seg">
+        <button data-dir="-1">Automatic</button>
+        <button data-dir="0">Off</button>
+        <button data-dir="1">Buck 48 → 12 V</button>
+        <button data-dir="2">Boost 12 → 48 V</button>
+      </div>
+      <div class="note" id="dir-note"></div>
+
+      <div class="set" data-field="buck_voltage" data-unit="V" data-step="0.05">
+        <label>Buck set-point (LV)</label><span class="ctl"></span><span class="hint"></span>
+      </div>
+      <div class="set" data-field="boost_voltage" data-unit="V" data-step="0.05">
+        <label>Boost set-point (HV)</label><span class="ctl"></span><span class="hint"></span>
+      </div>
+      <div class="set" data-field="buck_current_limit" data-unit="A" data-step="1">
+        <label>Buck current limit (LV)</label><span class="ctl"></span><span class="hint"></span>
+      </div>
+      <div class="set" data-field="boost_current_limit" data-unit="A" data-step="1">
+        <label>Boost current limit (HV)</label><span class="ctl"></span><span class="hint"></span>
+      </div>
+      <div class="set" data-field="precharge_voltage" data-unit="V" data-step="0.05">
+        <label>Precharge voltage</label><span class="ctl"></span><span class="hint"></span>
+      </div>
+      <div class="set">
+        <label>Precharge request</label>
+        <span class="ctl"><button id="prech-btn">Off</button></span>
+      </div>
+      <div id="error"></div>
+    </div>
+
+    <div class="card">
+      <h2>Details</h2>
+      <div class="row"><span>Software / hardware</span><span id="ver">—</span></div>
+      <div class="row"><span>Fault status</span><code id="r-fs">—</code></div>
+      <div class="row"><span>Faults</span><code id="r-f">—</code></div>
+      <div class="row"><span>Voltage status</span><code id="r-vs">—</code></div>
+      <div class="row"><span>Load status</span><code id="r-ls">—</code></div>
+      <div class="row"><span>Last 0x066 / 0x088 / 0x520</span><span id="ages">—</span></div>
+      <div class="row"><span>Sending 0x018</span><code id="tx">—</code></div>
+      <div class="row"><span>Frames sent / failed</span><span id="txn">—</span></div>
+      <div class="row"><span>Driver</span><span id="drv">—</span></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const DIRS = {'-1': 'Automatic', 0: 'Off', 1: 'Buck 48 → 12 V', 2: 'Boost 12 → 48 V'};
+const fmt = (v, d, u) => v == null ? '—' : v.toFixed(d) + ' ' + u;
+const hex = (v, w) => v == null ? '—' : '0x' + v.toString(16).toUpperCase().padStart(w, '0');
+let last = null;
+
+function showError(msg) {
+  $('error').textContent = msg || '';
+  $('error').style.display = msg ? 'block' : 'none';
+}
+
+async function send(changes) {
+  try {
+    const r = await fetch('api/control', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(changes)
+    });
+    const j = await r.json();
+    if (!r.ok) { showError(j.error || ('HTTP ' + r.status)); return false; }
+    showError(''); render(j); return true;
+  } catch (e) { showError('Could not reach the GX device: ' + e.message); return false; }
+}
+
+// Build the set-point rows
+document.querySelectorAll('.set[data-field]').forEach(row => {
+  const f = row.dataset.field;
+  const input = document.createElement('input');
+  input.type = 'number'; input.step = row.dataset.step; input.id = 'in-' + f;
+  const btn = document.createElement('button'); btn.textContent = 'Set';
+  const apply = async () => {
+    const v = parseFloat(input.value);
+    if (isNaN(v)) return showError('Enter a number');
+    if (await send({[f]: v})) input.blur();
+  };
+  btn.onclick = apply;
+  input.onkeydown = e => { if (e.key === 'Enter') apply(); if (e.key === 'Escape') input.blur(); };
+  row.querySelector('.ctl').append(input, ' ' + row.dataset.unit, btn);
+});
+
+document.querySelectorAll('[data-dir]').forEach(b => b.onclick = () => {
+  const d = +b.dataset.dir;
+  if (d > 0 && last && last.control.direction !== d && !confirm('Start ' + DIRS[d] + '?')) return;
+  send({direction: d});
+});
+$('prech-btn').onclick = () => {
+  if (!last) return;
+  const on = last.control.precharge;
+  if (!on && last.control.direction === -1) return showError('Precharge needs the Cerbo in control: choose Off, Buck or Boost first.');
+  if (!on && !confirm('Request precharge to ' + last.control.precharge_voltage + ' V?')) return;
+  send({precharge: on ? 0 : 1});
+};
+
+function render(s) {
+  last = s;
+  document.title = s.name + ' – DC-DC';
+  $('name').textContent = s.name;
+  $('sub').textContent = 'Nomadic D1 DC-DC converter · ' + s.interface;
+  $('online').textContent = s.online ? 'Online' : 'No data from converter';
+  $('online').className = 'pill ' + (s.online ? 'ok' : 'bad');
+
+  const e = s.electric || {};
+  $('lv-v').textContent = fmt(e.lv_voltage, 1, 'V');
+  $('lv-i').textContent = fmt(e.lv_current, 0, 'A');
+  $('lv-p').textContent = e.lv_voltage == null ? '—' : fmt(e.lv_voltage * e.lv_current, 0, 'W');
+  $('hv-v').textContent = fmt(e.hv_voltage, 1, 'V');
+  $('hv-i').textContent = fmt(e.hv_current, 0, 'A');
+  $('hv-p').textContent = e.hv_voltage == null ? '—' : fmt(e.hv_voltage * e.hv_current, 0, 'W');
+  $('temp').textContent = fmt(e.temperature, 0, '°C');
+
+  const p = s.parameter || {};
+  $('mode').textContent = p.operating_mode_text || '—';
+  $('prech').textContent = p.precharge_status_text || '—';
+  $('r-fs').textContent = hex(p.fault_status, 1);
+  $('r-f').textContent = hex(p.faults, 3);
+  $('r-vs').textContent = hex(p.voltage_status, 2);
+  $('r-ls').textContent = hex(p.load_status, 1);
+
+  $('alarms').style.display = s.alarms.length ? 'block' : 'none';
+  $('alarm-list').replaceChildren(...s.alarms.map(a => { const li = document.createElement('li'); li.textContent = a; return li; }));
+
+  const c = s.control;
+  document.querySelectorAll('[data-dir]').forEach(b => b.classList.toggle('on', +b.dataset.dir === c.direction));
+  let note = c.direction === -1
+    ? 'Automatic: the converter runs on its own built-in logic. The Cerbo sends no commands.'
+    : c.direction > 0 && c.sent_direction === 0
+    ? 'Holding OFF for ' + c.direction_change_delay + ' s before reversing direction…' : '';
+  if (c.test_timer_left != null) {
+    const m = Math.floor(c.test_timer_left / 60), sec = String(c.test_timer_left % 60).padStart(2, '0');
+    note += (note ? ' ' : '') + 'Test timer: switches to Off in ' + m + ':' + sec + '.';
+  }
+  $('dir-note').textContent = note;
+  document.querySelectorAll('.set[data-field]').forEach(row => {
+    const f = row.dataset.field, input = $('in-' + f), [lo, hi] = c.limits[f];
+    if (document.activeElement !== input) input.value = c[f];
+    input.min = lo; input.max = hi;
+    row.querySelector('.hint').textContent = 'Allowed ' + lo + ' – ' + hi + ' ' + row.dataset.unit;
+  });
+  $('prech-btn').textContent = c.precharge ? 'On – click to stop' : 'Off';
+  $('prech-btn').classList.toggle('on', c.precharge);
+
+  const v = s.version;
+  $('ver').textContent = v ? v.software + ' / ' + v.hardware : '—';
+  const age = k => s.rx_age[k] == null ? 'never' : s.rx_age[k].toFixed(1) + ' s';
+  $('ages').textContent = ['0x066', '0x088', '0x520'].map(age).join(' / ');
+  $('tx').textContent = s.tx.frame || 'nothing (automatic)';
+  $('txn').textContent = s.tx.sent + ' / ' + s.tx.errors;
+  $('drv').textContent = s.driver_version;
+}
+
+async function poll() {
+  try {
+    const r = await fetch('api/status', {cache: 'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    render(await r.json());
+  } catch (e) {
+    $('online').textContent = 'GX device unreachable';
+    $('online').className = 'pill bad';
+  } finally {
+    setTimeout(poll, 500);
+  }
+}
+poll();
+</script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+# cerbo-nomadic-d1
+
+[![tests](https://github.com/CKOCI13/cerbo-nomadic-d1/actions/workflows/tests.yml/badge.svg)](https://github.com/CKOCI13/cerbo-nomadic-d1/actions/workflows/tests.yml)
+[![license: MIT-0](https://img.shields.io/badge/license-MIT--0-blue.svg)](LICENSE)
+
+**See and control a Nomadic D1 DC-DC converter from a Victron Cerbo GX.** Its readings and controls
+then appear on the Cerbo's screen, in the VRM app on your phone, and on a small web page.
+
+![The D1's readings and controls on a Cerbo GX screen](docs/images/cerbo-readings.png)
+<sub>What the Cerbo screen shows. The picture is drawn from Victron's own screen design; the real screen may differ slightly.</sub>
+
+> [!WARNING]
+> **This controls power electronics.** It has been thoroughly tested in software (unit tests, a simulated
+> converter, and checks against Victron's GUI source code), but **not yet on a real D1 and Cerbo**. Follow the
+> [Safe Test Plan](docs/safe-test-plan.pdf) and use it at your own risk. This project isn't made by, or
+> affiliated with, Victron Energy or Nomadic.
+
+---
+
+## Contents
+
+- [What is this?](#what-is-this)
+- [What it can do](#what-it-can-do)
+- [What you need](#what-you-need)
+- [Try it on your PC in one minute](#try-it-on-your-pc-in-one-minute)
+- [Installing it for real](#installing-it-for-real)
+- [Safety](#safety)
+- [Project status and open questions](#project-status-and-open-questions)
+- [How it works](#how-it-works)
+- [What's in this repository](#whats-in-this-repository)
+- [For developers](#for-developers)
+- [FAQ](#faq)
+- [Glossary](#glossary)
+- [License and credits](#license-and-credits)
+
+---
+
+## What is this?
+
+Many vans, boats and off-grid systems have **two battery systems**: a big **48 V** battery for the heavy loads,
+and **12 V** batteries for the vehicle itself. A **DC-DC converter** moves energy between them.
+
+- The **Nomadic D1** is a bidirectional DC-DC converter. It can charge the 12 V side
+  from the 48 V side (**buck**), or push energy from the 12 V side up to the 48 V side (**boost**). It decides
+  this by itself, based on the 12 V battery's voltage. It also has a **CAN bus** connection for monitoring and control.
+- The **[Victron](https://www.victronenergy.com) Cerbo GX** is the "brain and screen" of a Victron power system.
+  It shows every battery, charger and inverter, and sends everything to Victron's **VRM** website and app.
+
+The Cerbo doesn't know how to talk to the D1. **This project is the translator:** a small program (a "driver")
+that runs on the Cerbo, speaks the D1's CAN language, and shows the D1 like any other Victron device.
+
+New to all this? **[How it works, in plain English](docs/how-it-works.md)** explains it with pictures.
+
+## What it can do
+
+- **Show the D1's readings:** 12 V and 48 V voltage and current, temperature, what mode it's in, and every
+  alarm and fault it reports, in plain words.
+- **Leave the D1 in charge, or take control.** In **Automatic** (the default) the D1 runs on its own logic,
+  exactly as it does without a Cerbo, and the Cerbo only watches. You can also choose **Off**, **Buck**
+  (charge the 12 V side, for example at 13.5 V) or **Boost**, with your own voltage targets and current limits.
+- **Work everywhere Victron does:** the Cerbo's touchscreen, Remote Console, the VRM portal and app, MQTT and Node-RED.
+- **Offer its own web page** at `http://<cerbo-address>:8088`, for any phone or laptop on the same network.
+- **Stay within your limits:** you set the highest and lowest values allowed, and anything outside them is refused.
+- **Help you test safely:** a pretend converter for trying it out, a "find the converter" check, and a test timer.
+
+| Cerbo: readings and controls | Cerbo: settings | VRM app |
+|---|---|---|
+| ![Readings card](docs/images/cerbo-readings.png) | ![Settings card](docs/images/cerbo-settings.png) | ![VRM app](docs/images/vrm-app.png) |
+
+## What you need
+
+| | |
+|---|---|
+| **Converter** | A Nomadic D1 bidirectional DC-DC converter |
+| **Victron device** | A Cerbo GX (or another Victron GX device) running **Venus OS v3.80 or newer** |
+| **Cable** | A normal network (Ethernet) patch cable, which you adapt. The [Installation Guide](docs/installation-guide.pdf) shows how |
+| **Terminators** | A 120 Ω resistor at the D1 end, plus the Victron terminator plug that comes with the Cerbo |
+| **A computer** | Windows, for the [`Cerbo Setup.bat`](Cerbo%20Setup.bat) helper. On Mac or Linux, use the commands in the [driver reference](dbus-nomadic-dcdc/README.md) |
+
+You don't need to install anything on the Cerbo yourself, and you don't need programming knowledge:
+the helper copies and installs the driver for you.
+
+## Try it on your PC in one minute
+
+You can see the driver working without a Cerbo or a converter. It includes a **pretend D1**.
+You need [Python 3](https://www.python.org/downloads/) installed.
+
+```bash
+git clone https://github.com/CKOCI13/cerbo-nomadic-d1.git
+cd cerbo-nomadic-d1
+python dbus-nomadic-dcdc/dbus-nomadic-dcdc.py --simulate --no-dbus
+```
+
+Then open **<http://localhost:8089>** in your browser. Click **Buck** and watch the pretend 12 V battery charge
+to 13.5 V, or leave it on **Automatic** and watch the pretend D1 decide by itself. Press **Ctrl+C** to stop.
+(No Git? Click the green **Code** button on GitHub, then **Download ZIP**, unzip it, and run the last line
+inside the unzipped folder. On Mac or Linux, type `python3` instead of `python`.)
+
+![The web page](docs/images/web-page.png)
+
+## Installing it for real
+
+Follow the **[Installation Guide (PDF)](docs/installation-guide.pdf)**. It has pictures for every step. In short:
+
+1. **Make the cable.** Cut one end off a network cable and connect three of its wires to the D1.
+2. **Set up the Cerbo.** Check the firmware version, choose the CAN port and its speed, and allow your PC to connect.
+3. **Connect everything.**
+4. **Run [`Cerbo Setup.bat`](Cerbo%20Setup.bat)** on your Windows PC. It finds the converter, lets you edit the
+   settings, and installs the driver with a menu: no commands to type.
+5. **Test it** with the **[Safe Test Plan (PDF)](docs/safe-test-plan.pdf)**, one small step at a time.
+
+After installing, the driver starts by itself whenever the Cerbo starts, including after firmware updates.
+
+## Safety
+
+The driver is careful by design:
+
+- **It starts in Automatic,** and sends the D1 nothing at all. The D1 keeps working exactly as before until
+  you choose otherwise.
+- **Every value is checked against limits** that you set in [`config.ini`](dbus-nomadic-dcdc/config.ini).
+  The defaults are the D1 manual's own ranges: 10–13.5 V buck target, 42–57.8 V boost target, 178 A buck and 57 A boost.
+- **Changing between buck and boost** always passes through Off for a second.
+- **A test timer** (optional) switches Buck or Boost back to Off after a few minutes.
+- **The D1 protects itself** against over-voltage, over-current, short circuits and overheating.
+- **The D1's wake-up wire (KL15) is the emergency stop:** switched off, the D1 stops straight away, whatever the Cerbo says.
+
+Before relying on Off, Buck or Boost, do the **"hand-back" test** in the Safe Test Plan (see the next section for why).
+
+## Project status and open questions
+
+**Works and is tested in software:**
+
+- The CAN encoding and decoding, checked against frames worked out by hand from Nomadic's specification.
+- The control logic, limits, test timer and settings that survive a restart.
+- The Cerbo screen and VRM items, checked against the rules in Victron's GUI source code.
+- The web page and its API, the "find the converter" scan, and the pretend D1.
+
+Every change is tested automatically by GitHub ([the tests badge](#cerbo-nomadic-d1) above).
+
+**Not yet tried on real hardware**, and **not yet known** (Nomadic's documents don't say):
+
+1. When the Cerbo stops sending commands (a restart, or the cable comes loose), does the D1 go back to its own
+   logic, and how quickly? The Safe Test Plan includes a test for this.
+2. Does the D1 send its readings even when it isn't receiving commands? The driver assumes it does.
+3. Which direction counts as positive current in the D1's readings.
+4. Whether the 12 V target may go above 13.5 V. The D1 manual's adjustable range stops at 13.5 V.
+
+If you try it, please share what you find in an [issue](../../issues).
+
+## How it works
+
+```mermaid
+flowchart LR
+    D1["Nomadic D1<br/>DC-DC converter"] <-- "CAN bus<br/>(network cable)" --> DRV
+    subgraph CERBO["Victron Cerbo GX"]
+        DRV["This driver<br/>(the translator)"] --> DBUS["Venus OS<br/>D-Bus"]
+        DRV --> WEB["Web page<br/>port 8088"]
+    end
+    DBUS --> SCREEN["Cerbo screen<br/>and Remote Console"]
+    DBUS --> VRM["VRM portal<br/>and app"]
+    DBUS --> MQTT["MQTT /<br/>Node-RED"]
+```
+
+- **Listening:** the D1 sends three kinds of CAN message: measurements 100 times a second, status 20 times a
+  second, and its version 10 times a second. The driver decodes them and publishes them on Venus OS's internal
+  message bus (D-Bus). Everything else in the Cerbo (the screen, VRM, MQTT) reads them from there.
+- **Controlling:** in Automatic the driver sends nothing. When you choose Off, Buck or Boost, it sends one control
+  message every 10 ms (what the D1's specification requires), with the direction, voltage target and current limit.
+- **On the screen:** the driver uses Victron's standard "switch" interface (the same one used by GX relays and
+  smart switches), so its readings and controls appear in the Cerbo's switch pane and in VRM without changing
+  any Victron software.
+
+The **[developer guide](docs/developer-guide.md)** explains the design in detail.
+
+## What's in this repository
+
+```
+cerbo-nomadic-d1/
+├── README.md                 ← you are here
+├── Cerbo Setup.bat           ← Windows helper: copies, tests and installs the driver on the Cerbo
+├── dbus-nomadic-dcdc/        ← the driver itself: this whole folder goes onto the Cerbo
+│   ├── dbus-nomadic-dcdc.py      the driver program
+│   ├── nomadic_can.py            encodes and decodes the D1's CAN messages
+│   ├── config.ini                settings and safety limits (edit this)
+│   ├── webui.html                the built-in web page
+│   ├── install.sh, uninstall.sh  add / remove it as a Cerbo service
+│   ├── service/                  start-up scripts used by Venus OS
+│   └── README.md                 technical reference: every setting, D-Bus path and command
+├── docs/
+│   ├── installation-guide.pdf    step-by-step guide with pictures
+│   ├── safe-test-plan.pdf        printable checklist for testing it safely
+│   ├── how-it-works.md           plain-English explanation with pictures
+│   ├── developer-guide.md        how the code is built
+│   └── images/                   pictures used by the docs
+├── tests/                    ← automated tests (run on any PC)
+├── .github/workflows/        ← makes GitHub run the tests on every change
+├── CHANGELOG.md              ← what changed in each version
+└── LICENSE                   ← MIT No Attribution: use it for anything
+```
+
+## For developers
+
+- The driver is plain **Python 3** using only the standard library, plus the libraries already on every
+  Victron GX device (`dbus-python`, `PyGObject` and Victron's `velib_python`).
+- Run the tests on any computer: `python -m unittest discover -s tests -v`. See [tests/README.md](tests/README.md).
+- The **[developer guide](docs/developer-guide.md)** covers the architecture, threads, CAN messages, control
+  logic, D-Bus mapping, web API, simulation and how to make changes safely.
+- The **[driver reference](dbus-nomadic-dcdc/README.md)** lists every setting, D-Bus path and manual command.
+
+Contributions are welcome: open an issue or a pull request.
+
+## FAQ
+
+**Will installing this change how my D1 behaves?**
+No. It starts in Automatic and sends nothing until you choose Off, Buck or Boost. The D1 keeps doing what it does today.
+
+**Do I need to know how to program?**
+No. The [Installation Guide](docs/installation-guide.pdf) and the `Cerbo Setup.bat` menu cover everything.
+You will make a simple cable and press some buttons on the Cerbo's screen.
+
+**Does it work with Victron's VRM app?**
+Yes. The readings and controls appear in the **Switches** section of the VRM portal and app. To change values
+remotely, set *Settings → VRM → VRM Portal access level* to **Full** on the Cerbo.
+
+**Can I break something?**
+The D1 protects itself, and the driver refuses values outside your limits. A wiring mistake is the biggest
+real risk: the Safe Test Plan checks the wiring with the power off before anything is switched on.
+
+**How do I remove it?**
+Run `Cerbo Setup.bat` and choose **8**. The D1 carries on working on its own.
+
+**Where are Nomadic's documents?**
+They're Nomadic's copyrighted material, so they aren't included here. Ask Nomadic for the *D1 Bidirectional
+DC-DC Converter Manual* and the *DC-DC Converter CAN Interface Control Document* (NI-TLN-CONTROLS-DCDCCAN-R1).
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| **Buck** | Converting down: the 48 V side charges the 12 V side |
+| **Boost** | Converting up: the 12 V side pushes energy to the 48 V side |
+| **CAN bus** | A two-wire network that vehicles and batteries use to exchange short messages |
+| **CAN-H / CAN-L** | The two CAN wires ("high" and "low"), twisted together |
+| **Termination** | A 120 Ω resistor at each end of a CAN bus, which stops messages reflecting back |
+| **KL30 / KL15** | Automotive names for the D1's permanent 12 V supply (KL30) and its "wake-up" / enable input (KL15) |
+| **Cerbo GX / GX device** | Victron's system monitor and controller |
+| **Venus OS** | The Linux-based software that runs on Victron GX devices |
+| **D-Bus** | The internal message system Venus OS uses to share values between programs |
+| **VRM** | Victron Remote Management: Victron's website and phone app for remote monitoring |
+| **Remote Console** | The Cerbo's screen, shown in a web browser or in VRM |
+| **Switch pane** | The page on the Cerbo screen that shows switches, sliders and readings from devices |
+| **Driver** | A program that lets one device (the Cerbo) understand another (the D1) |
+
+## License and credits
+
+- **License:** [MIT No Attribution (MIT-0)](LICENSE). You may use, copy, change and share this for any purpose,
+  with no need to credit anyone. It comes with **no warranty**.
+- **Trademarks:** Victron Energy, Cerbo GX, Venus OS and VRM are trademarks of Victron Energy B.V. Nomadic and
+  D1 belong to their owner. This project isn't affiliated with or endorsed by either company.
+- **Built on:** Victron's open-source [Venus OS D-Bus API](https://github.com/victronenergy/venus/wiki/dbus),
+  [velib_python](https://github.com/victronenergy/velib_python) and the [gui-v2](https://github.com/victronenergy/gui-v2)
+  design, and Victron's [VE.Can cable pinout](https://www.victronenergy.com/live/battery_compatibility:can-bus_bms-cable).
