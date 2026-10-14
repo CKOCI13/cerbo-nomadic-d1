@@ -15,6 +15,13 @@ then appear on the Cerbo's screen, in the VRM app on your phone, and on a small 
 > [Safe Test Plan](docs/safe-test-plan.pdf) and use it at your own risk. This project isn't made by, or
 > affiliated with, Victron Energy or Nomadic.
 
+> [!TIP]
+> **Two editions. This is the control edition, for advanced users.** If you only want to *see* what the D1 is
+> doing, use the **[monitor-only edition (cerbo-nomadic-d1-monitor)](https://github.com/CKOCI13/cerbo-nomadic-d1-monitor)** instead: same readings on the Cerbo
+> screen, in VRM and on a web page with charts, but it never sends the D1 anything. Choose this control edition only
+> if you need the Cerbo to command the D1, for example to [limit its current](#limiting-current-to-protect-fuses-and-wiring),
+> and you're ready to test it carefully. Only one of the two can be installed on a Cerbo at a time.
+
 ---
 
 ## Contents
@@ -25,6 +32,7 @@ then appear on the Cerbo's screen, in the VRM app on your phone, and on a small 
 - [Try it on your PC in one minute](#try-it-on-your-pc-in-one-minute)
 - [Installing it for real](#installing-it-for-real)
 - [Safety](#safety)
+- [Limiting current to protect fuses and wiring](#limiting-current-to-protect-fuses-and-wiring)
 - [Project status and open questions](#project-status-and-open-questions)
 - [How it works](#how-it-works)
 - [What's in this repository](#whats-in-this-repository)
@@ -125,6 +133,34 @@ The driver is careful by design:
 - **The D1's wake-up wire (KL15) is the emergency stop:** switched off, the D1 stops straight away, whatever the Cerbo says.
 
 Before relying on Off, Buck or Boost, do the **"hand-back" test** in the Safe Test Plan (see the next section for why).
+
+## Limiting current to protect fuses and wiring
+
+Left to itself, the D1 can push up to **178 A into the 12 V side** (buck) and **57 A into the 48 V side** (boost),
+per its manual. If a fuse or cable on either side is smaller than that, the fuse can blow, or the cable can overheat.
+This edition can hold the D1 to a lower current:
+
+1. In [`config.ini`](dbus-nomadic-dcdc/config.ini), set `buck_current_limit_max` (and `boost_current_limit_max` if
+   you use boost) to what your fuse and cable can take with a margin. For example, about 80 % of the fuse rating,
+   and never more than the cable's rating. Nobody can then set a higher value, from the screen, VRM or the web page.
+2. Set `buck_current_limit` to the current you want, and choose **Buck** (or **Boost**).
+3. Set `startup = last`, so that the Cerbo goes back to Buck after it restarts.
+
+**What you give up.** While the Cerbo commands Buck, the D1 no longer decides by itself: it charges the 12 V side
+to your Buck voltage and won't boost or rest on its own. In **Automatic** the Cerbo sends nothing, so **no limit
+applies** and the D1 uses its own factory limits.
+
+> [!CAUTION]
+> **This is not a replacement for correctly sized fuses and cables.** The limit only holds while the Cerbo keeps
+> sending its command every 10 ms. When those commands stop, for example while the Cerbo restarts or updates its
+> firmware, if the driver stops, or if the CAN cable comes loose, it isn't yet known what the D1 does. It may go back
+> to its own logic **at full current**. So:
+>
+> - **Never fit a bigger fuse than the cable is rated for** to stop it blowing. The fuse is what protects the cable.
+> - The lasting fix is a cable and fuse sized for the D1's maximum currents, or asking **Nomadic** to lower the D1's
+>   own current limit, which then holds with or without a Cerbo.
+> - Use the Cerbo's limit as an extra layer on top of that, and only after the **hand-back test** (Safe Test Plan,
+>   step 5g) has shown what your D1 does when the commands stop.
 
 ## Project status and open questions
 

@@ -2,6 +2,13 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## Unreleased (documentation)
+
+- This repository is now the **control edition, for advanced users.** A separate **monitor-only edition**, which
+  never sends the D1 anything, is at [cerbo-nomadic-d1-monitor](https://github.com/CKOCI13/cerbo-nomadic-d1-monitor).
+- New README section: **limiting current to protect fuses and wiring**, and why that limit is not a replacement for
+  correctly sized fuses and cables.
+
 ## 1.3.0 (2026-10-06): safe testing
 
 - **Simulation mode** (`--simulate`, Cerbo Setup option 9). The real driver runs against a pretend D1 and never
