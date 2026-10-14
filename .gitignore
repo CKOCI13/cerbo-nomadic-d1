@@ -30,3 +30,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Made by make-usb-installer.sh / Cerbo Setup option U
+venus-data.tar.gz
