@@ -264,7 +264,9 @@ GitHub runs them on every push (see [`.github/workflows/tests.yml`](../.github/w
 5. **Run the tests,** and add one for any new behaviour.
 6. **Update the docs:** the [driver reference](../dbus-nomadic-dcdc/README.md) for settings and paths, this guide
    for design changes, and [CHANGELOG.md](../CHANGELOG.md). Bump `VERSION` in the driver.
-7. **On a real system,** follow the [Safe Test Plan](safe-test-plan.pdf).
+7. **Installation Guide:** edit [`docs/src/installation-guide.html`](src/installation-guide.html), then rebuild the PDF
+   with `npm install playwright` (once) and `node docs/src/build.cjs`.
+8. **On a real system,** follow the [Safe Test Plan](safe-test-plan.pdf).
 
 ## Open questions and ideas
 

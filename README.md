@@ -254,7 +254,8 @@ cerbo-nomadic-d1/
 │   ├── safe-test-plan.pdf        printable checklist for testing it safely
 │   ├── how-it-works.md           plain-English explanation with pictures
 │   ├── developer-guide.md        how the code is built
-│   └── images/                   pictures used by the docs
+│   ├── images/                   pictures used by the docs
+│   └── src/                      source of the Installation Guide PDF, and the script that builds it
 ├── tests/                    ← automated tests (run on any PC)
 ├── .github/workflows/        ← makes GitHub run the tests on every change
 ├── CHANGELOG.md              ← what changed in each version
