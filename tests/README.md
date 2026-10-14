@@ -23,6 +23,7 @@ automatically on every change; the result is the "tests" badge at the top of the
 | [`test_telemetry_and_web.py`](test_telemetry_and_web.py) | Readings go stale when the D1 goes quiet. Short frames are ignored. The web page needs its password, refuses posts from other web sites, and checks every value |
 | [`test_dbus.py`](test_dbus.py) | Everything shown on the Cerbo and in VRM meets the display rules in Victron's GUI source code. Readings, alarms, "No communication", writes from the screen or VRM (and refusals), the on/off switch, mirroring changes made elsewhere, renaming that survives a restart, turning the switch pane off |
 | [`test_scan.py`](test_scan.py) | "Find the converter" finds the right port, spots a wrong bitrate from bus errors, warns about old firmware, and works without `iproute2` |
+| [`test_usb_installer.py`](test_usb_installer.py) | The USB-stick installer unpacks to `/data/dbus-nomadic-dcdc`, leaves out run-time files, and its hook runs `install.sh` only after a good unpack (needs `sh` and `tar`, so it is skipped on plain Windows) |
 | [`test_simulation.py`](test_simulation.py) | The pretend D1 follows the manual's automatic logic, obeys Off / Buck / Boost, protects its 12 V side, and flags CAN loss. The whole driver runs end to end against it |
 
 ## How they run without a Cerbo

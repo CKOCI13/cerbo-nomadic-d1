@@ -2,8 +2,10 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
-## Unreleased (documentation)
+## Unreleased
 
+- **Install from a USB stick or SD card, with no network or SSH:** `Cerbo Setup.bat` option U (or
+  `make-usb-installer.sh`) makes `venus-data.tar.gz`; Venus OS unpacks it at boot and its hook installs the service.
 - This repository is now the **control edition, for advanced users.** A separate **monitor-only edition**, which
   never sends the D1 anything, is at [cerbo-nomadic-d1-monitor](https://github.com/CKOCI13/cerbo-nomadic-d1-monitor).
 - New README section: **limiting current to protect fuses and wiring**, and why that limit is not a replacement for
