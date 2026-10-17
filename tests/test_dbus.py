@@ -35,7 +35,13 @@ class DbusTest(unittest.TestCase):
 
     def test_service_name_and_registration(self):
         self.assertTrue(self.svc.registered)
-        self.assertEqual(self.svc.name, 'com.victronenergy.dcdc.nomadic_can1')
+        self.assertEqual(self.svc.name, 'com.victronenergy.dcdc.nomadic_auto')
+
+    def test_connection_shows_the_port_auto_found(self):
+        self.assertTrue(self.value('/Mgmt/Connection').startswith('CAN auto'))
+        self.cfg['can']['interface'] = 'vecan1'   # what AutoCanBus does once it hears the converter
+        self.refresh()
+        self.assertTrue(self.value('/Mgmt/Connection').startswith('CAN vecan1'))
 
     def test_every_item_meets_the_gui_v2_rules(self):
         self.refresh(driver.Telemetry(1))   # offline: nothing received yet

@@ -81,11 +81,11 @@ scp -O -r dbus-nomadic-dcdc root@<GX-IP>:/data/
 
 ### Or: install from a USB stick or SD card
 
-Edit `config.ini` first, then build `venus-data.tar.gz` (`Cerbo Setup.bat` option U, or `sh make-usb-installer.sh`
-in the project folder), copy it to the top folder of a FAT32 USB stick or SD card, put it in the GX and restart.
+Download `venus-data-nomadic-d1.tar.gz` from the [latest release](https://github.com/CKOCI13/cerbo-nomadic-d1/releases/latest) (or edit `config.ini` and build your own with
+`Cerbo Setup.bat` option U or `sh make-usb-installer.sh`), copy it to the top folder of a FAT32 USB stick or SD card,
+put it in the GX and restart. Modifications must be enabled (*Settings › General › Modification checks*, the default).
 Venus OS unpacks it into `/data` and runs its `rc/post-hook.sh`, which runs `install.sh`: steps 4 and 7 are done
-for you, with no SSH. **Take the stick out afterwards**, or every restart unpacks it again and restores its
-`config.ini`. See the [project README](../README.md#installing-from-a-usb-stick-or-sd-card-no-network-needed).
+for you, with no SSH. The hook then renames the file on the stick to `...tar.gz.installed`, so it installs only once. See the [project README](../README.md#installing-from-a-usb-stick-or-sd-card-no-network-needed).
 
 ## 5. Find the converter and check communication (listen-only, sends nothing)
 
@@ -102,7 +102,8 @@ the termination and the bitrate (`ip -details link show can1`).
 
 Edit `config.ini`. At minimum, set:
 
-* `interface`: the port that `--scan` reported
+* `interface`: leave it on `auto` (the driver uses the CAN port it hears the D1 on), or force the port that
+  `--scan` reported. Names differ between models: `can0`/`can1`, or `vecan0`/`vecan1` on the Cerbo GX MK2
 * the **limits** (`buck_voltage_min/max`, `boost_voltage_min/max`, `buck_current_limit_max`,
   `boost_current_limit_max`): they default to the D1's own ranges. Tighten them to what your batteries,
   wiring and fuses can safely take. The driver rejects any command outside them.
@@ -180,7 +181,7 @@ but the switch pane, VRM Switches, D-Bus, MQTT and the web page keep working.
 
 ### D-Bus / MQTT / Node-RED
 
-Service: `com.victronenergy.dcdc.nomadic_<interface>` (MQTT: `N/<portal-id>/dcdc/<device_instance>/...`)
+Service: `com.victronenergy.dcdc.nomadic_<interface>` (`nomadic_auto` with the default `interface = auto`) (MQTT: `N/<portal-id>/dcdc/<device_instance>/...`)
 
 | Path | Meaning |
 |---|---|
@@ -205,7 +206,7 @@ Service: `com.victronenergy.dcdc.nomadic_<interface>` (MQTT: `N/<portal-id>/dcdc
 | `/Nomadic/Control/SentDirection` | Direction actually in the frame (0 during a reversal pause, empty in automatic) |
 | `/GenericInput/<item>/...`, `/SwitchableOutput/<item>/...` | The switch pane items above ([Victron switch API](https://github.com/victronenergy/venus/wiki/dbus#switch)) |
 
-From the GX shell: `dbus -y com.victronenergy.dcdc.nomadic_can1 /Nomadic/Control/BuckVoltage SetValue 13.2`.
+From the GX shell: `dbus -y com.victronenergy.dcdc.nomadic_auto /Nomadic/Control/BuckVoltage SetValue 13.2`.
 Over MQTT, publish `{"value": 13.2}` to `W/<portal-id>/dcdc/<device_instance>/Nomadic/Control/BuckVoltage`.
 
 ## Behaviour and safety
