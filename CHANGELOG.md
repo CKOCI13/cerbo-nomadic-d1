@@ -2,6 +2,14 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.4.1 (2026-10-25)
+
+- **CAN port profile you can actually choose:** the guide said to set the converter's port to *Up, but no services*. Victron's current screen software (gui-v2, Venus OS v3.80+) hides that option and won't let you pick it. The guide, the driver reference and the `--scan` advice now say **VE.Can (250 kbit/s)** or **CAN-bus BMS LV (500 kbit/s)**; the driver reference shows how to set *Up, but no services* over SSH if you want it.
+- **Start-up script fix (USB stick and normal installs):** Venus OS only runs `/data/rc.local` when it is executable, and when another add-on ends that file with `exit 0`, a line added after it never runs. `install.sh` now puts its line before the first top-level `exit`, moves it there if an older version left it after one, and always makes the file executable. New tests cover it, and the USB file was checked against Victron's own `update-data.sh`.
+- **USB file names:** the README and guide now warn that a browser-renamed file such as `... (1).tar.gz` is skipped by the Cerbo (names with spaces don't work) and must be renamed back.
+- **Boost current limit explained:** `boost_current_limit` is counted on the 48 V side, so the 12 V cable and breaker carry up to about 5 times as many amps (30 A boost is about 154 A on the 12 V side at worst). The README, `config.ini` and the guide now give the conversion and a worked example for a 150 A breaker.
+- **D1 manual Rev D:** references updated from Rev C. The guide now gives Rev D's fuses: 3 A for KL30 and 1 A for KL15.
+
 ## 1.4.0 (2026-10-17): test release
 
 - **Finds its CAN port by itself:** `interface = auto` is the new default. The driver listens on every CAN

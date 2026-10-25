@@ -132,7 +132,8 @@ access level.
    including `interface = auto`, so the driver finds the D1's CAN port by itself on any Cerbo.
    (On a Mac, download with Chrome or Firefox: Safari can unpack it into a `.tar` file, which the Cerbo ignores.)
 2. **Copy it** to the top folder of a USB stick or SD card (FAT32 is the safe choice), not inside another folder.
-   Put only **one** `venus-data` file on the stick.
+   Put only **one** `venus-data` file on the stick, and check its name: if your browser saved it as
+   `venus-data-nomadic-d1 (1).tar.gz`, rename it back to `venus-data-nomadic-d1.tar.gz`. The Cerbo skips names with spaces.
 3. **Check one setting:** *Settings › General › Modification checks*: modifications must be enabled (the default).
    When they're off, Venus OS switches off the start-up script and the driver disappears after a restart.
 4. **Put the stick in the Cerbo and restart it** (Settings › General › Reboot, or switch it off and on).
@@ -173,8 +174,29 @@ This edition can hold the D1 to a lower current:
 1. In [`config.ini`](dbus-nomadic-dcdc/config.ini), set `buck_current_limit_max` (and `boost_current_limit_max` if
    you use boost) to what your fuse and cable can take with a margin. For example, about 80 % of the fuse rating,
    and never more than the cable's rating. Nobody can then set a higher value, from the screen, VRM or the web page.
+   **For boost, convert first** (see below): its limit is in 48 V-side amps.
 2. Set `buck_current_limit` to the current you want, and choose **Buck** (or **Boost**).
 3. Set `startup = last`, so that the Cerbo goes back to Buck after it restarts.
+
+**The boost limit is counted on the 48 V side.** `buck_current_limit` is the current on the 12 V side, but
+`boost_current_limit` is the current the D1 delivers on the **48 V** side. Boosting, it draws about four to five
+times as many amps from the 12 V side, and that is the side with the long cable and the breaker in most vans:
+
+> 12 V-side amps ≈ `boost_current_limit` × 48 V-side volts ÷ (12 V-side volts × 0.92 efficiency)
+
+The worst case is a full 48 V battery (58 V) with the 12 V side sagging to 12.3 V, where boost stops:
+
+| `boost_current_limit` (48 V side) | 12 V-side current, typical (55 V, 13.4 V) | Worst case (58 V, 12.3 V) |
+|---|---|---|
+| 15 A | about 67 A | about 77 A |
+| 20 A | about 89 A | about 103 A |
+| 23 A | about 103 A | about 118 A |
+| 30 A (the default) | about 134 A | about 154 A |
+| No limit (Automatic, factory setting) | up to about 200 A (2.5 kW) | about 220 A |
+
+**Example:** a 12 V cable protected by a **150 A breaker**, kept at 80 % = 120 A, gives
+`boost_current_limit_max = 23` (120 × 12.3 × 0.92 ÷ 58). Measure with a clamp meter on the 12 V cable during the
+Safe Test Plan's boost step to confirm, because efficiency drops at high power and the real current can be higher.
 
 **What you give up.** While the Cerbo commands Buck, the D1 no longer decides by itself: it charges the 12 V side
 to your Buck voltage and won't boost or rest on its own. In **Automatic** the Cerbo sends nothing, so **no limit

@@ -35,7 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import nomadic_can as nc
 
-VERSION = '1.4.0'
+VERSION = '1.4.1'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VELIB_PATHS = (
     os.path.join(BASE_DIR, 'ext', 'velib_python'),
@@ -56,7 +56,7 @@ DEFAULTS = {
         'startup': 'auto',
         'test_timer': '0',
         'direction_change_delay': '1.0',
-        # Ranges from the D1 manual (Rev C), "Configurable Parameters"
+        # Ranges from the D1 manual (Rev D), "Configurable Parameters"
         'buck_voltage': '13.5',
         'buck_voltage_min': '10.0',
         'buck_voltage_max': '13.5',
@@ -1269,8 +1269,10 @@ def run_scan(configured, seconds=3.0):
     elif not found and wrong_speed:
         name, bitrate = wrong_speed[0]
         other = {250000: '500', 500000: '250'}.get(bitrate, 'other')
+        profile = {'250': 'VE.Can (250 kbit/s)', '500': 'CAN-bus BMS LV (500 kbit/s)'}.get(
+            other, 'the other speed')
         print('Something is talking on %s at a different speed. On the Cerbo, set that port\'s CAN-bus '
-              'profile to "Up, but no services (%s kbit/s)" and run this again.' % (name, other))
+              'profile to "%s" and run this again.' % (name, profile))
     elif not found:
         print('The converter was not heard on any port. Check that the D1 has KL30 and KL15 (12 V), '
               'the cable, the 120 ohm terminators, and try the other speed (250 or 500 kbit/s).')
