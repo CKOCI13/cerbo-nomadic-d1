@@ -2,6 +2,12 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## Documentation update (2026-10-25, driver unchanged)
+
+- **Cable: no CAN ground wire.** The Cerbo and the D1 already share the van's negative, and the Cerbo's VE.Can 2 port isn't isolated, so the white/green wire (RJ45 pin 3) is now left unused and insulated. The guide adds a one-time check of the voltage between the Cerbo's negative and the D1's GND.
+- **Joining with lever connectors.** The D1's signal plug already has labelled CAN_H and CAN_L wires, so the guide now joins them to the network cable's brown pair with two 3-way lever wire connectors (e.g. WAGO 221-413), with the 120 Ω resistor between the connectors. No crimping.
+- **New wiring pictures** from one shared source (`docs/src/wiring.html`, rebuilt with `node docs/src/build-wiring.cjs`), including a close-up of the two lever connectors and the resistor. Installation Guide, Safe Test Plan, driver reference, README and "How it works" updated.
+
 ## 1.5.0 (2026-10-25)
 
 - **Automatic with limits** (new default, `automatic = limited`): in Automatic the Cerbo now chooses buck, boost or standby itself, by the D1 manual's own rules (buck below 12.5 V while the 48 V side is 41–58 V, standby to 13.5 V, boost from 13.5 V until 12.3 V), and sends the configured current limits every 10 ms, so owners never pick Buck or Boost and the 12 V cable stays within its limit. Each change waits 2 s (an engine-crank dip is ignored), boost waits 60 s after a low-voltage stop (no buck/boost flapping on a weak alternator), it never asks for buck and boost together or goes straight from one to the other, and it sends Off if the readings stop. The web page and `/Nomadic/Control/AutoReason` say what it chose and why. `automatic = hands_off` keeps the old behaviour (send nothing). New tests (`tests/test_auto_logic.py`) include a 20-minute closed loop against the pretend D1: at most 100 A on the 12 V side, against 263 A with the D1's own logic.

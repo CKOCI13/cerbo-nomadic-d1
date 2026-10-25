@@ -323,6 +323,9 @@ GitHub runs them on every push (see [`.github/workflows/tests.yml`](../.github/w
    for design changes, and [CHANGELOG.md](../CHANGELOG.md). Bump `VERSION` in the driver.
 7. **Installation Guide:** edit [`docs/src/installation-guide.html`](src/installation-guide.html), then rebuild the PDF
    with `npm install playwright` (once) and `node docs/src/build.cjs`.
+   The wiring pictures (`wiring-*.png`, `explained-cable.png`) come from [`docs/src/wiring.html`](src/wiring.html),
+   which is the same file in all four repositories apart from `data-model` (D1 or D2): rebuild them with
+   `node docs/src/build-wiring.cjs`.
 8. **On a real system,** follow the [Safe Test Plan](safe-test-plan.pdf).
 
 ## Open questions and ideas
