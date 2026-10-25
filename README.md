@@ -63,9 +63,10 @@ New to all this? **[How it works, in plain English](docs/how-it-works.md)** expl
 
 - **Show the D1's readings:** 12 V and 48 V voltage and current, temperature, what mode it's in, and every
   alarm and fault it reports, in plain words.
-- **Leave the D1 in charge, or take control.** In **Automatic** (the default) the D1 runs on its own logic,
-  exactly as it does without a Cerbo, and the Cerbo only watches. You can also choose **Off**, **Buck**
-  (charge the 12 V side, for example at 13.5 V) or **Boost**, with your own voltage targets and current limits.
+- **Run it automatically, within your limits.** In **Automatic** (the default) the Cerbo decides buck, boost or
+  standby by the D1 manual's own rules, the same choice the D1 makes by itself, and sends your **current limits**
+  with it, so the 12 V cable and fuse are never overloaded. Owners never need to choose Buck or Boost. You can also
+  choose **Off**, **Buck** or **Boost** by hand, with your own voltage targets and current limits.
 - **Work everywhere Victron does:** the Cerbo's touchscreen, Remote Console, the VRM portal and app, MQTT and Node-RED.
 - **Offer its own web page** at `http://<cerbo-address>:8088`, for any phone or laptop on the same network.
 - **Stay within your limits:** you set the highest and lowest values allowed, and anything outside them is refused.
@@ -132,7 +133,8 @@ access level.
    including `interface = auto`, so the driver finds the D1's CAN port by itself on any Cerbo.
    (On a Mac, download with Chrome or Firefox: Safari can unpack it into a `.tar` file, which the Cerbo ignores.)
 2. **Copy it** to the top folder of a USB stick or SD card (FAT32 is the safe choice), not inside another folder.
-   Put only **one** `venus-data` file on the stick.
+   Put only **one** `venus-data` file on the stick, and check its name: if your browser saved it as
+   `venus-data-nomadic-d1 (1).tar.gz`, rename it back to `venus-data-nomadic-d1.tar.gz`. The Cerbo skips names with spaces.
 3. **Check one setting:** *Settings › General › Modification checks*: modifications must be enabled (the default).
    When they're off, Venus OS switches off the start-up script and the driver disappears after a restart.
 4. **Put the stick in the Cerbo and restart it** (Settings › General › Reboot, or switch it off and on).
@@ -153,14 +155,21 @@ profile and speed (250 / 500 kbit/s) as the Installation Guide describes. To rem
 
 The driver is careful by design:
 
-- **It starts in Automatic,** and sends the D1 nothing at all. The D1 keeps working exactly as before until
-  you choose otherwise.
+- **It starts in Automatic with limits:** it switches between buck, boost and standby at the D1 manual's own
+  thresholds (buck below 12.5 V, boost from 13.5 V until 12.3 V), waits 2 seconds before each change so a dip
+  while the engine cranks is ignored, and pauses boost for a minute after the 12 V side sags. It only ever asks
+  for one direction at a time, with Off between buck and boost. Set `automatic = hands_off` to make Automatic
+  send nothing at all, so the D1 runs on its own logic and factory limits, exactly as without a Cerbo.
 - **Every value is checked against limits** that you set in [`config.ini`](dbus-nomadic-dcdc/config.ini).
-  The defaults are the D1 manual's own ranges: 10–13.5 V buck target, 42–57.8 V boost target, 178 A buck and 57 A boost.
+  The voltage limits are the D1 manual's own ranges (10–13.5 V buck target, 42–57.8 V boost target). The current
+  limits are set for a stock Grand Design LTV1 (2 AWG cable on a 150 A fuse): 120 A buck and 23 A boost, which
+  keeps the 12 V cable under 120 A either way. They only apply while the Cerbo commands Buck or Boost.
 - **Changing between buck and boost** always passes through Off for a second.
 - **A test timer** (optional) switches Buck or Boost back to Off after a few minutes.
 - **The D1 protects itself** against over-voltage, over-current, short circuits and overheating.
 - **The D1's wake-up wire (KL15) is the emergency stop:** switched off, the D1 stops straight away, whatever the Cerbo says.
+  If KL15 is joined to KL30 on one always-on 12 V wire (as on the LTV1), there's no switch: pull that wire's fuse,
+  or open the D1's power fuses or breaker.
 
 Before relying on Off, Buck or Boost, do the **"hand-back" test** in the Safe Test Plan (see the next section for why).
 
@@ -173,12 +182,45 @@ This edition can hold the D1 to a lower current:
 1. In [`config.ini`](dbus-nomadic-dcdc/config.ini), set `buck_current_limit_max` (and `boost_current_limit_max` if
    you use boost) to what your fuse and cable can take with a margin. For example, about 80 % of the fuse rating,
    and never more than the cable's rating. Nobody can then set a higher value, from the screen, VRM or the web page.
-2. Set `buck_current_limit` to the current you want, and choose **Buck** (or **Boost**).
-3. Set `startup = last`, so that the Cerbo goes back to Buck after it restarts.
+   **For boost, convert first** (see below): its limit is in 48 V-side amps.
+2. Set `buck_current_limit` and `boost_current_limit` to the currents you want (at most the `_max` values).
+3. Leave the Cerbo on **Automatic** (`automatic = limited`, the default). It then chooses buck, boost or standby by
+   itself and always sends these limits, also after every restart.
 
-**What you give up.** While the Cerbo commands Buck, the D1 no longer decides by itself: it charges the 12 V side
-to your Buck voltage and won't boost or rest on its own. In **Automatic** the Cerbo sends nothing, so **no limit
-applies** and the D1 uses its own factory limits.
+**The boost limit is counted on the 48 V side.** `buck_current_limit` is the current on the 12 V side, but
+`boost_current_limit` is the current the D1 delivers on the **48 V** side. Boosting, it draws about four to five
+times as many amps from the 12 V side, and that is the side with the long cable and the breaker in most vans:
+
+> 12 V-side amps ≈ `boost_current_limit` × 48 V-side volts ÷ (12 V-side volts × 0.92 efficiency)
+
+The worst case is a full 48 V battery (58 V) with the 12 V side sagging to 12.3 V, where boost stops:
+
+| `boost_current_limit` (48 V side) | 12 V-side current, typical (55 V, 13.4 V) | Worst case (58 V, 12.3 V) |
+|---|---|---|
+| 15 A | about 67 A | about 77 A |
+| 20 A (the default) | about 89 A | about 103 A |
+| 23 A (the default maximum) | about 103 A | about 118 A |
+| 30 A | about 134 A | about 154 A |
+| No limit (Automatic, factory setting) | up to about 200 A (2.5 kW) | about 220 A |
+
+**Example:** a 12 V cable protected by a **150 A breaker**, kept at 80 % = 120 A, gives
+`boost_current_limit_max = 23` (120 × 12.3 × 0.92 ÷ 58). Measure with a clamp meter on the 12 V cable during the
+Safe Test Plan's boost step to confirm, because efficiency drops at high power and the real current can be higher.
+
+**Stock Grand Design LTV1.** The shipped `config.ini` is already set for its 2 AWG cable and 150 A fuse:
+`buck_current_limit_max = 120` and `boost_current_limit_max = 23`, so nobody can choose more. Left on its own the
+D1 can draw well over 150 A from the 12 V side (up to about 200 A boosting, 178 A bucking), more than that cable
+and fuse are meant for. In **Automatic** (with limits, the default), and in Buck or Boost, the Cerbo holds it to
+these limits. Only with `automatic = hands_off` does Automatic send nothing and leave the D1 at its factory limits.
+If you've upgraded the cable and fuse, raise the two `_max` values to match (80 % of the new fuse, converted for
+boost as above).
+
+**How Automatic with limits works.** The Cerbo reads the D1's 12 V and 48 V voltages 100 times a second and makes
+the choice the D1 would make: buck below 12.5 V (while the 48 V side is 41–58 V) up to about 13.4 V, standby
+between 12.5 and 13.5 V, boost from 13.5 V until the 12 V side falls below 12.3 V. It waits 2 seconds before each
+change and doesn't retry boost for a minute after the 12 V side sagged, so a weak alternator can't make it flap.
+If the D1's readings stop, it sends Off. **Choosing Buck or Boost by hand** overrides this until you choose
+Automatic again.
 
 > [!CAUTION]
 > **This is not a replacement for correctly sized fuses and cables.** The limit only holds while the Cerbo keeps
@@ -230,8 +272,9 @@ flowchart LR
 - **Listening:** the D1 sends three kinds of CAN message: measurements 100 times a second, status 20 times a
   second, and its version 10 times a second. The driver decodes them and publishes them on Venus OS's internal
   message bus (D-Bus). Everything else in the Cerbo (the screen, VRM, MQTT) reads them from there.
-- **Controlling:** in Automatic the driver sends nothing. When you choose Off, Buck or Boost, it sends one control
-  message every 10 ms (what the D1's specification requires), with the direction, voltage target and current limit.
+- **Controlling:** the driver sends one control message every 10 ms (what the D1's specification requires), with
+  the direction, voltage target and current limit. In Automatic it picks the direction itself from the D1's
+  readings; when you choose Off, Buck or Boost, it sends that. (With `automatic = hands_off`, Automatic sends nothing.)
 - **On the screen:** the driver uses Victron's standard "switch" interface (the same one used by GX relays and
   smart switches), so its readings and controls appear in the Cerbo's switch pane and in VRM without changing
   any Victron software.
@@ -281,7 +324,12 @@ Contributions are welcome: open an issue or a pull request.
 ## FAQ
 
 **Will installing this change how my D1 behaves?**
-No. It starts in Automatic and sends nothing until you choose Off, Buck or Boost. The D1 keeps doing what it does today.
+It makes the same buck / boost / standby choices as before, but within your current limits: in Automatic the Cerbo
+makes the choice and sends the limits. To install it without changing anything at all (only watching), set
+`automatic = hands_off` first; the [Safe Test Plan](docs/safe-test-plan.pdf) does this for its first stages.
+
+**Do I have to choose Buck or Boost?**
+No. Leave it on Automatic. It switches by itself, exactly when the D1 would, and keeps to your limits.
 
 **Do I need to know how to program?**
 No. The [Installation Guide](docs/installation-guide.pdf) and the `Cerbo Setup.bat` menu cover everything.

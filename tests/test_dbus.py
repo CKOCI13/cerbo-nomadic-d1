@@ -82,8 +82,8 @@ class DbusTest(unittest.TestCase):
         so = '/SwitchableOutput/'
         self.assertEqual(driver.DIRECTION_LABELS[self.svc[so + 'direction/Dimming']], 'Automatic')
         self.assertEqual(self.svc[so + 'buck_voltage/Settings/DimmingMax'], 13.5)
-        self.assertEqual(self.svc[so + 'buck_current_limit/Settings/DimmingMax'], 178)
-        self.assertEqual(self.svc[so + 'boost_current_limit/Settings/DimmingMax'], 57)
+        self.assertEqual(self.svc[so + 'buck_current_limit/Settings/DimmingMax'], 120)
+        self.assertEqual(self.svc[so + 'boost_current_limit/Settings/DimmingMax'], 23)
         self.assertEqual(self.svc[so + 'buck_voltage/Settings/Group'], 'DC-DC D1 settings')
         self.assertIsNone(self.svc[so + 'direction/Settings/Group'])
         # precharge is hidden by default (the D1 manual doesn't use it)
@@ -110,9 +110,12 @@ class DbusTest(unittest.TestCase):
         self.assertEqual(self.c.snapshot()['direction'], 0)
         self.assertEqual(self.svc.SetValue('/Mode', 1), 0)
         self.assertEqual(self.c.snapshot()['direction'], 1)
-        # Automatic over D-Bus is -1, and then nothing is sent
+        # Automatic over D-Bus is -1; then the Cerbo decides (no readings attached here: Off)
         self.assertEqual(self.svc.SetValue('/Nomadic/Control/Direction', -1), 0)
-        self.assertIsNone(self.c.frame())
+        self.assertEqual(self.c.snapshot()['direction'], driver.DIRECTION_AUTO)
+        self.assertEqual(nc.decode_ctrl(self.c.frame())['direction'], 0)
+        self.refresh()
+        self.assertIn('no readings', self.svc['/Nomadic/Control/AutoReason'])
 
     def test_changes_from_elsewhere_are_mirrored(self):
         self.c.update({'boost_voltage': 54.0, 'direction': 0})   # e.g. from the web page

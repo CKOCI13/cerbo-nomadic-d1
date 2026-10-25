@@ -25,10 +25,27 @@ class ControllerTest(unittest.TestCase):
         self.state = os.path.join(tempfile.mkdtemp(), 'state.json')
         self.c = driver.Controller(self.cfg, self.state)
 
-    def test_starts_in_automatic_and_sends_nothing(self):
-        self.assertEqual(self.c.snapshot()['direction'], driver.DIRECTION_AUTO)
-        self.assertIsNone(self.c.frame())
-        self.assertIsNone(self.c.snapshot()['sent_direction'])
+    def test_starts_in_automatic_with_limits(self):
+        # automatic = limited (the default): the Cerbo decides, and with no readings yet it sends Off
+        snap = self.c.snapshot()
+        self.assertEqual((snap['direction'], snap['automatic']), (driver.DIRECTION_AUTO, 'limited'))
+        f = nc.decode_ctrl(self.c.frame())
+        self.assertEqual(f['direction'], nc.DIRECTION_OFF)
+        self.assertEqual(f['current_limit'], 100)
+        self.assertEqual(self.c.snapshot()['sent_direction'], nc.DIRECTION_OFF)
+        self.assertIn('no readings', self.c.snapshot()['auto_reason'])
+
+    def test_hands_off_automatic_sends_nothing(self):
+        self.cfg['control']['automatic'] = 'hands_off'
+        c = driver.Controller(self.cfg, self.state)
+        self.assertIsNone(c.frame())
+        self.assertIsNone(c.snapshot()['sent_direction'])
+        self.assertIsNone(c.snapshot()['auto_reason'])
+
+    def test_rejects_an_unknown_automatic_setting(self):
+        self.cfg['control']['automatic'] = 'sometimes'
+        with self.assertRaises(ValueError):
+            driver.Controller(self.cfg, self.state)
 
     def test_buck_and_boost_use_their_own_set_point_and_current_limit(self):
         self.c.update({'direction': nc.DIRECTION_BUCK})
@@ -42,7 +59,7 @@ class ControllerTest(unittest.TestCase):
         f = nc.decode_ctrl(self.c.frame())
         self.assertEqual(f['direction'], 2)
         self.assertTrue(near(f['voltage_setpoint'], 55.2))
-        self.assertEqual(f['current_limit'], 30)
+        self.assertEqual(f['current_limit'], 20)
 
     def test_reversing_always_passes_through_off(self):
         self.c.update({'direction': 1})
@@ -53,7 +70,7 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(nc.decode_ctrl(self.c.frame())['direction'], 2)
         # Boost -> Automatic -> Buck in quick succession is still held off
         self.c.update({'direction': driver.DIRECTION_AUTO})
-        self.assertIsNone(self.c.frame())
+        self.assertEqual(nc.decode_ctrl(self.c.frame())['direction'], 0)   # no readings: Off
         self.c.update({'direction': 1})
         self.assertEqual(nc.decode_ctrl(self.c.frame())['direction'], 0)
         time.sleep(0.35)
@@ -69,7 +86,7 @@ class ControllerTest(unittest.TestCase):
     def test_refuses_values_outside_the_limits(self):
         bad_changes = [
             {'buck_voltage': 13.6}, {'buck_voltage': 9.9}, {'boost_voltage': 57.9},
-            {'boost_voltage': 41.9}, {'buck_current_limit': 179}, {'boost_current_limit': 58},
+            {'boost_voltage': 41.9}, {'buck_current_limit': 121}, {'boost_current_limit': 24},
             {'boost_current_limit': 10.5}, {'precharge_voltage': 60}, {'direction': 3},
             {'direction': -2}, {'direction': '1'}, {'precharge': 2}, {'buck_voltage': 'abc'},
             {'buck_voltage': float('nan')}, {'current_limit': 10}, {},
@@ -82,10 +99,10 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(self.c.snapshot()['buck_voltage'], 13.5)   # nothing changed
 
     def test_settings_are_saved_but_startup_is_automatic(self):
-        self.c.update({'buck_voltage': 13.2, 'buck_current_limit': 178, 'direction': 0,
+        self.c.update({'buck_voltage': 13.2, 'buck_current_limit': 120, 'direction': 0,
                        'precharge': True})
         saved = json.load(open(self.state))
-        self.assertEqual(saved['buck_current_limit'], 178)
+        self.assertEqual(saved['buck_current_limit'], 120)
         restarted = driver.Controller(self.cfg, self.state).snapshot()
         self.assertEqual(restarted['direction'], driver.DIRECTION_AUTO)
         self.assertEqual(restarted['buck_voltage'], 13.2)

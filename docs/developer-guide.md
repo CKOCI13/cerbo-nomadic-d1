@@ -32,8 +32,9 @@ as a service on a Victron GX device (Venus OS, which is Linux). It:
 1. **Reads** the D1's CAN messages from a SocketCAN interface (`can0` / `can1` on a Cerbo GX: `can1` is the second port, VE.Can 2 on the MK2 or the 500 kbit/s-only
    BMS-Can on the original).
 2. **Publishes** the decoded values on D-Bus, where the Cerbo's GUI, VRM, MQTT and Node-RED pick them up.
-3. **Sends** a control message every 10 ms, but only when the user has chosen Off, Buck or Boost.
-   In Automatic it sends nothing.
+3. **Sends** a control message every 10 ms. In Automatic (`automatic = limited`, the default) `AutoLogic` picks
+   the direction from the D1's readings; Off, Buck or Boost chosen by the user override it. With
+   `automatic = hands_off`, Automatic sends nothing.
 4. **Serves** a small web page with a JSON API.
 
 It uses only the Python standard library, plus what every GX device already has: `dbus-python`, `PyGObject`
@@ -54,7 +55,7 @@ flowchart TB
         MAIN <--> DBUS[(D-Bus)]
     end
     D1 -- "0x066, 0x088, 0x520" --> RX
-    TX -- "0x018 (not in Automatic)" --> D1
+    TX -- "0x018 every 10 ms" --> D1
     DBUS <--> GUI["Cerbo screen, VRM, MQTT"]
 ```
 
@@ -79,7 +80,7 @@ must stay self-contained. That's also why the tests live outside it.
 | Thread | Function | What it does |
 |---|---|---|
 | `can-rx` | `rx_worker()` | Blocks on the CAN socket (0.5 s timeout) and feeds each frame to `Telemetry.feed()` |
-| `can-tx` | `tx_worker()` | Every 10 ms asks `Controller.frame()` for a payload and sends it. `None` (Automatic) means send nothing |
+| `can-tx` | `tx_worker()` | Every 10 ms asks `Controller.frame()` for a payload and sends it. `None` (Automatic with `automatic = hands_off`) means send nothing |
 | `web` | `ThreadingHTTPServer.serve_forever()` | The web page and API, one short-lived thread per request |
 | main | `GLib.MainLoop` | Every `update_interval` (1 s): `StatusWatcher` (logs online/offline and alarm changes) and `DbusService.refresh()`. D-Bus write callbacks also run here |
 
@@ -126,21 +127,61 @@ All in `class Controller`.
 
 | `direction` | Meaning | What `frame()` returns |
 |---|---|---|
-| `-1` | **Automatic**: the D1 runs on its own logic | `None`: nothing is sent |
+| `-1` | **Automatic** | `limited`: `AutoLogic.decide()` picks 0, 1 or 2 from the latest DCDC_ELECTRIC_VALUE; `hands_off`: `None`, nothing is sent |
 | `0` | Off | A frame with direction 0 |
 | `1` | Buck (48 → 12 V) | Direction 1, `buck_voltage`, `buck_current_limit` |
 | `2` | Boost (12 → 48 V) | Direction 2, `boost_voltage`, `boost_current_limit` |
 
 Rules, in the order `frame()` applies them:
 
-1. **Automatic sends nothing.** This is the default after every start (`startup = auto`), so installing the
-   driver doesn't change how the D1 behaves.
+1. **Automatic.** The default after every start (`startup = auto`). With `automatic = limited` the direction comes
+   from `AutoLogic` (below); with `hands_off`, `frame()` returns `None` and nothing is sent.
 2. **Test timer.** If `test_timer` is set and Buck or Boost has been running for longer than that, the
    direction becomes Off (logged, and saved).
 3. **No direct reversal.** Changing between buck and boost sends Off for `direction_change_delay` seconds
    first, even when the change goes through Automatic in between.
 4. **The set-point and current limit follow the side.** For Off, the values of the last active direction are
-   sent.
+   sent. In Automatic the buck set-point is capped at `AutoLogic.BUCK_TARGET_MAX` (13.4 V).
+
+### Automatic with limits (`class AutoLogic`)
+
+`Controller.frame()` reads the latest DCDC_ELECTRIC_VALUE (`Telemetry.fresh()`, `None` if older than
+`[can] timeout`) and asks `AutoLogic.decide(electric, now)` for the direction. The rules are the D1 manual's
+(Rev D, section VI):
+
+| Now | Goes to | When |
+|---|---|---|
+| Off (standby) | Buck | 12 V side < 12.5 V and 48 V side 41–58 V, for 2 s |
+| Off (standby) | Boost | 12 V side 13.5–16 V for 2 s, and not within 60 s of a low-voltage boost stop |
+| Buck | Off | 48 V side outside 41–58 V (at once), or 12 V side > 13.5 V for 2 s |
+| Boost | Off | 12 V side > 16 V (at once), or < 12.3 V for 2 s (then boost waits 60 s) |
+| any | Off | No fresh readings |
+
+It never goes straight from buck to boost or back, and the Controller's reversal pause still applies on top.
+`AutoLogic.reason` is a short text for the web page and `/Nomadic/Control/AutoReason`. The 2 s confirmation
+ignores an engine-crank dip; the 60 s boost pause stops buck/boost flapping when the alternator can't carry the
+boost draw. `tests/test_auto_logic.py` checks every rule, a random fuzz for "never both / never straight across",
+and a 20-minute closed loop against the pretend D1 with an engine cycle, comparing `limited` with `hands_off`. In Automatic the buck set-point is capped at `AutoLogic.BUCK_TARGET_MAX` (13.4 V).
+
+### Automatic with limits (`class AutoLogic`)
+
+`Controller.frame()` reads the latest DCDC_ELECTRIC_VALUE (`Telemetry.fresh()`, `None` if older than
+`[can] timeout`) and asks `AutoLogic.decide(electric, now)` for the direction. The rules are the D1 manual's
+(Rev D, section VI):
+
+| Now | Goes to | When |
+|---|---|---|
+| Off (standby) | Buck | 12 V side < 12.5 V and 48 V side 41–58 V, for 2 s |
+| Off (standby) | Boost | 12 V side 13.5–16 V for 2 s, and not within 60 s of a low-voltage boost stop |
+| Buck | Off | 48 V side outside 41–58 V (at once), or 12 V side > 13.5 V for 2 s |
+| Boost | Off | 12 V side > 16 V (at once), or < 12.3 V for 2 s (then boost waits 60 s) |
+| any | Off | No fresh readings |
+
+It never goes straight from buck to boost or back, and the Controller's reversal pause still applies on top.
+`AutoLogic.reason` is a short text for the web page and `/Nomadic/Control/AutoReason`. The 2 s confirmation
+ignores an engine-crank dip; the 60 s boost pause stops buck/boost flapping when the alternator can't carry the
+boost draw. `tests/test_auto_logic.py` checks every rule, a random fuzz for "never both / never straight across",
+and a 20-minute closed loop against the pretend D1 with an engine cycle, comparing `limited` with `hands_off`.
 
 Every change goes through `Controller.update()`. It validates **all** the values before changing **any** of
 them, checks them against the limits from `config.ini`, raises `ValueError` with a readable message if
@@ -201,8 +242,11 @@ item against them:
 methods. Nothing touches a CAN socket. The pretend D1:
 
 - Sends the three status messages at their real rates.
-- Follows the manual's automatic logic: buck below 12.5 V (while the 48 V side is 41–58 V), up to about 13.4 V,
-  with standby between 12.5 and 13.5 V.
+- Follows the manual's automatic logic at its factory limits: buck below 12.5 V (while the 48 V side is 41–58 V),
+  up to about 13.4 V and 178 A, standby between 12.5 and 13.5 V, boost from 13.5 V (up to 57 A on the 48 V side)
+  until the 12 V side falls below 12.3 V.
+- Has a pretend engine (`engine=True`, the default): every 3 minutes it alternates between loads only and an
+  alternator holding the 12 V side at 14.2 V (up to 150 A), so buck, standby and boost all show up.
 - Obeys Off / Buck / Boost while control frames keep arriving. Boost stops below 12.3 V on the 12 V side.
 - Flags "CAN loss" for 10 s if control frames stop, then goes back to automatic. This is an assumption, which is
   exactly what the hand-back test on real hardware will check.
@@ -285,8 +329,8 @@ GitHub runs them on every push (see [`.github/workflows/tests.yml`](../.github/w
 
 Waiting on real hardware or on Nomadic:
 
-- **What the D1 does when control frames stop:** does it go back to automatic, and after how long? This decides
-  whether "Automatic" can safely mean "send nothing" in every situation.
+- **What the D1 does when control frames stop:** does it go back to automatic, and after how long? In Automatic
+  with limits the Cerbo is always sending, so this decides what happens during a Cerbo restart or update.
 - **Whether the D1 sends its status without receiving commands.** The scan and monitor assume it does.
 - **Current sign convention,** and whether the buck target may exceed 13.5 V over CAN.
 
@@ -294,4 +338,4 @@ Possible improvements:
 
 - Raise GX notifications (alarms) for D1 faults, through Venus OS's alarm paths.
 - Log the D1's own values to VRM for history graphs.
-- Once the CAN-loss behaviour is known, decide how Automatic should hand control back after a restart.
+- Once the CAN-loss behaviour is known, tune `AutoLogic`'s thresholds and timings against the real D1.

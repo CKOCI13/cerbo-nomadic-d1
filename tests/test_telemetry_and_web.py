@@ -78,7 +78,7 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertTrue(st['online'])
         self.assertEqual(st['alarms'][0], 'CAN loss')   # most serious first
-        self.assertEqual(st['control']['limits']['boost_current_limit'], [0, 57])
+        self.assertEqual(st['control']['limits']['boost_current_limit'], [0, 23])
 
     def test_control_is_validated(self):
         # Other web sites can't post here: a JSON content type is required

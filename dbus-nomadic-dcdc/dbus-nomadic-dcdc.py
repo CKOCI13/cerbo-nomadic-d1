@@ -35,7 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import nomadic_can as nc
 
-VERSION = '1.4.0'
+VERSION = '1.5.0'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VELIB_PATHS = (
     os.path.join(BASE_DIR, 'ext', 'velib_python'),
@@ -54,9 +54,10 @@ DEFAULTS = {
     },
     'control': {
         'startup': 'auto',
+        'automatic': 'limited',
         'test_timer': '0',
         'direction_change_delay': '1.0',
-        # Ranges from the D1 manual (Rev C), "Configurable Parameters"
+        # Ranges from the D1 manual (Rev D), "Configurable Parameters"
         'buck_voltage': '13.5',
         'buck_voltage_min': '10.0',
         'buck_voltage_max': '13.5',
@@ -83,9 +84,12 @@ DEFAULTS = {
     },
 }
 
-# Direction as the driver sees it. AUTO is not a CAN value: in AUTO the driver sends no
-# EMS_DCDC_CTRL at all, so the D1 runs on its own built-in buck/boost logic.
+# Direction as the driver sees it. AUTO is not a CAN value. In AUTO with automatic = limited
+# (the default) the driver chooses Off, Buck or Boost itself with the D1 manual's rules (AutoLogic)
+# and sends the current limits; with automatic = hands_off it sends no EMS_DCDC_CTRL at all, so
+# the D1 runs on its own built-in buck/boost logic at its factory limits.
 DIRECTION_AUTO = -1
+AUTOMATIC_CHOICES = ('limited', 'hands_off')
 DIRECTION_NAMES = {DIRECTION_AUTO: 'Automatic'}
 DIRECTION_NAMES.update(nc.DIRECTION_NAMES)
 STARTUP_CHOICES = {'auto': DIRECTION_AUTO, 'off': nc.DIRECTION_OFF}
@@ -125,6 +129,101 @@ def save_json(path, data):
 
 # --------------------------------------------------------------------------- control
 
+class AutoLogic:
+    """Automatic with limits: the D1 manual's own buck/boost rules, decided on the Cerbo.
+
+    Left alone, the D1 picks buck, boost or standby from its 12 V-side voltage, at its factory
+    current limits. Here the driver makes the same choice from the D1's own readings
+    (DCDC_ELECTRIC_VALUE) and sends it in EMS_DCDC_CTRL together with the configured current
+    limits, so the owner never has to pick Buck or Boost. Thresholds: D1 manual Rev D, section VI
+    and the "Quick mode trigger reference". Two differences, both on the careful side:
+
+      * a condition must hold for CONFIRM seconds before the direction changes, so a short dip
+        (the engine cranking) or a noisy reading doesn't start a buck or end a boost;
+      * after boost stops because the 12 V side sagged, boost isn't tried again for BOOST_RETRY
+        seconds, so a weak alternator can't make it flap between buck and boost.
+
+    Only one of Off, Buck or Boost is ever chosen; the Controller still adds the Off pause
+    whenever the direction reverses.
+    """
+
+    BUCK_BELOW = 12.5        # V, 12 V side: start buck below this ...
+    HV_MIN, HV_MAX = 41.0, 58.0   # ... while the 48 V side is in this window
+    BUCK_EXIT_ABOVE = 13.5   # V, 12 V side: stop buck above this
+    BOOST_FROM = 13.5        # V, 12 V side: start boost from this ...
+    LV_MAX = 16.0            # ... up to this (above it: never convert)
+    BOOST_STOP_BELOW = 12.3  # V, 12 V side: stop boost below this
+    BUCK_TARGET_MAX = 13.4   # V: the manual's own buck target. Kept below BUCK_EXIT_ABOVE, or
+                             # buck would push the 12 V side over its own exit threshold.
+    CONFIRM = 2.0            # s a condition must hold before acting on it
+    BOOST_RETRY = 60.0       # s before boost may start again after a low-voltage stop
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """Start again from standby (when Automatic is chosen again after Off, Buck or Boost)."""
+        self.direction = nc.DIRECTION_OFF
+        self.reason = 'Waiting for readings from the converter'
+        self._since = {}
+        self._boost_blocked_until = None
+
+    def _held(self, name, condition, now):
+        """True once `condition` has been true continuously for CONFIRM seconds."""
+        if not condition:
+            self._since.pop(name, None)
+            return False
+        return now - self._since.setdefault(name, now) >= self.CONFIRM
+
+    def _set(self, direction, reason):
+        if direction != self.direction:
+            log.info('Automatic: %s (%s)', DIRECTION_NAMES[direction], reason)
+            self._since.clear()
+        self.direction, self.reason = direction, reason
+        return direction
+
+    def decide(self, electric, now):
+        """The direction to send now, from the latest DCDC_ELECTRIC_VALUE (None if stale)."""
+        if electric is None:
+            self._since.clear()
+            return self._set(nc.DIRECTION_OFF, 'no readings from the converter, so Off')
+        lv, hv = electric['lv_voltage'], electric['hv_voltage']
+        buck_ok = self.HV_MIN <= hv <= self.HV_MAX
+        d = self.direction
+        if d == nc.DIRECTION_BUCK:
+            if not buck_ok:
+                return self._set(nc.DIRECTION_OFF, '48 V side %.1f V is outside %g-%g V'
+                                 % (hv, self.HV_MIN, self.HV_MAX))
+            if self._held('buck_exit', lv > self.BUCK_EXIT_ABOVE, now):
+                return self._set(nc.DIRECTION_OFF, '12 V side %.1f V is above %g V'
+                                 % (lv, self.BUCK_EXIT_ABOVE))
+            return self._set(d, '12 V side was below %g V' % self.BUCK_BELOW)
+        if d == nc.DIRECTION_BOOST:
+            if lv > self.LV_MAX:
+                return self._set(nc.DIRECTION_OFF, '12 V side %.1f V is above %g V' % (lv, self.LV_MAX))
+            if self._held('boost_stop', lv < self.BOOST_STOP_BELOW, now):
+                self._boost_blocked_until = now + self.BOOST_RETRY
+                return self._set(nc.DIRECTION_OFF, '12 V side %.1f V fell below %g V; no boost for %g s'
+                                 % (lv, self.BOOST_STOP_BELOW, self.BOOST_RETRY))
+            return self._set(d, '12 V side was %g V or more' % self.BOOST_FROM)
+        # Standby (Off)
+        if self._held('buck', lv < self.BUCK_BELOW and buck_ok, now):
+            return self._set(nc.DIRECTION_BUCK, '12 V side %.1f V is below %g V' % (lv, self.BUCK_BELOW))
+        blocked = self._boost_blocked_until is not None and now < self._boost_blocked_until
+        if not blocked and self._held('boost', self.BOOST_FROM <= lv <= self.LV_MAX, now):
+            return self._set(nc.DIRECTION_BOOST, '12 V side %.1f V is %g V or more'
+                             % (lv, self.BOOST_FROM))
+        if lv < self.BUCK_BELOW and not buck_ok:
+            why = '12 V side is low, but the 48 V side %.1f V is outside %g-%g V' % (
+                hv, self.HV_MIN, self.HV_MAX)
+        else:
+            why = '12 V side %.1f V' % lv
+        if blocked:
+            why += '; boost paused after the 12 V side sagged (%d s left)' % (
+                self._boost_blocked_until - now)
+        return self._set(nc.DIRECTION_OFF, 'Standby: ' + why)
+
+
 class Controller:
     """The commanded state, shared by the TX thread, D-Bus and the web page."""
 
@@ -155,6 +254,11 @@ class Controller:
         startup = c.get('startup').strip().lower()
         if startup not in ('auto', 'off', 'last'):
             raise ValueError('config: startup must be auto, off or last')
+        self.automatic = c.get('automatic').strip().lower()
+        if self.automatic not in AUTOMATIC_CHOICES:
+            raise ValueError('config: automatic must be %s' % ' or '.join(AUTOMATIC_CHOICES))
+        self.auto = AutoLogic() if self.automatic == 'limited' else None
+        self.telemetry = None   # set by main(); AutoLogic reads the converter's voltages from it
 
         self.change_delay = c.getfloat('direction_change_delay')
         self.test_timer = c.getfloat('test_timer') * 60   # seconds; 0 = off
@@ -194,6 +298,9 @@ class Controller:
         if values['direction'] in (nc.DIRECTION_BUCK, nc.DIRECTION_BOOST):
             self._active_since = time.monotonic()
         log.info('Start-up control: %s', self._describe(values))
+        log.info('Automatic = %s: %s', self.automatic,
+                 'the Cerbo chooses buck or boost by the D1 manual\'s rules and sends the current '
+                 'limits' if self.auto else 'the Cerbo sends nothing; the D1 uses its own factory limits')
         if self.test_timer:
             log.warning('Test timer on: Buck/Boost switch to Off after %g min', self.test_timer / 60)
 
@@ -236,6 +343,9 @@ class Controller:
                 new[field] = self._check(field, value)
             if new['direction'] != nc.DIRECTION_OFF:
                 new['last_direction'] = new['direction']
+            if (self.auto is not None and new['direction'] == DIRECTION_AUTO
+                    and self._values['direction'] != DIRECTION_AUTO):
+                self.auto.reset()   # decide afresh, not from whatever Automatic last did
             if new['direction'] not in (nc.DIRECTION_BUCK, nc.DIRECTION_BOOST):
                 self._active_since = None
             elif new['direction'] != self._values['direction']:
@@ -245,21 +355,29 @@ class Controller:
         log.info('Control changed: %s', self._describe(changes))
 
     def frame(self):
-        """EMS_DCDC_CTRL payload for this TX cycle, or None in automatic (send nothing)."""
+        """EMS_DCDC_CTRL payload for this TX cycle, or None in hands-off automatic (send nothing)."""
+        electric = None
+        if self.auto is not None and self.telemetry is not None:
+            electric = self.telemetry.fresh(nc.ID_ELECTRIC)
         with self._lock:
             v = self._values
-            if v['direction'] == DIRECTION_AUTO:
-                self._sent_direction = None
-                return None
             now = time.monotonic()
-            if (self.test_timer and self._active_since is not None
-                    and now - self._active_since > self.test_timer):
-                log.warning('Test timer: %s ran for %g min, switching to Off',
-                            DIRECTION_NAMES[v['direction']], self.test_timer / 60)
-                v = self._values = dict(v, direction=nc.DIRECTION_OFF)
-                self._active_since = None
-                self._save(v)
-            direction = v['direction']
+            automatic = v['direction'] == DIRECTION_AUTO
+            if automatic:
+                if self.auto is None:
+                    self._sent_direction = None
+                    return None
+                direction = self.auto.decide(electric, now)
+            else:
+                if (self.test_timer and self._active_since is not None
+                        and now - self._active_since > self.test_timer):
+                    log.warning('Test timer: %s ran for %g min, switching to Off',
+                                DIRECTION_NAMES[v['direction']], self.test_timer / 60)
+                    v = self._values = dict(v, direction=nc.DIRECTION_OFF)
+                    self._active_since = None
+                    self._save(v)
+                direction = v['direction']
+            chosen = direction
             # Never reverse buck <-> boost without direction_change_delay seconds of OFF between.
             if (direction and self._last_active and direction != self._last_active
                     and now - self._last_active_time < self.change_delay):
@@ -268,15 +386,21 @@ class Controller:
                 self._last_active, self._last_active_time = direction, now
             self._sent_direction = direction
             # The set-point and current limit apply to whichever side is the output.
-            mode = v['direction'] or v['last_direction']
+            mode = chosen if automatic else (v['direction'] or v['last_direction'])
             side = 'boost' if mode == nc.DIRECTION_BOOST else 'buck'
+            voltage = v[side + '_voltage']
+            if automatic and side == 'buck':
+                voltage = min(voltage, AutoLogic.BUCK_TARGET_MAX)
             return nc.encode_ctrl(direction, v['precharge'], v[side + '_current_limit'],
-                                  v[side + '_voltage'], v['precharge_voltage'])
+                                  voltage, v['precharge_voltage'])
 
     def snapshot(self):
         with self._lock:
             out = dict(self._values)
             out['sent_direction'] = self._sent_direction
+            out['automatic'] = self.automatic
+            out['auto_reason'] = (self.auto.reason if self.auto is not None
+                                  and out['direction'] == DIRECTION_AUTO else None)
             out['test_timer_left'] = (
                 None if self._active_since is None or not self.test_timer
                 else max(0, round(self.test_timer - (time.monotonic() - self._active_since))))
@@ -329,6 +453,13 @@ class Telemetry:
         with self._lock:
             self._latest[can_id] = (time.monotonic(), value)
             self._counts[can_id] += 1
+
+    def fresh(self, can_id):
+        """The latest decoded value of one message, or None if none arrived within the timeout."""
+        now = time.monotonic()
+        with self._lock:
+            t, value = self._latest.get(can_id, (None, None))
+        return value if t is not None and now - t <= self.timeout else None
 
     def snapshot(self):
         now = time.monotonic()
@@ -520,25 +651,33 @@ class SimulatedD1:
     """A pretend D1 for --simulate. Nothing touches a CAN bus.
 
     It follows the D1 manual's automatic logic (buck below 12.5 V while the 48 V side is 41-58 V,
-    standby between 12.5 and 13.5 V) and obeys EMS_DCDC_CTRL while that keeps arriving. It is for
+    standby between 12.5 and 13.5 V, boost from 13.5 V until the 12 V side falls below 12.3 V) at
+    its factory limits, and obeys EMS_DCDC_CTRL while that keeps arriving. With engine=True the
+    pretend 12 V side alternates every three minutes between loads only and a running engine
+    whose alternator holds it at 14.2 V (up to ALTERNATOR A), so every mode shows up. It is for
     trying out the screens and controls, not for predicting what the real converter will do.
     """
 
     interface = 'simulated'
     CONTROL_TIMEOUT = 1.0   # s without EMS_DCDC_CTRL before the pretend D1 flags CAN loss (a guess)
     LOAD = 15.0             # A drawn by the pretend 12 V loads
+    ALTERNATOR = 150.0      # A the pretend alternator can give while the engine runs
+    ALTERNATOR_V = 14.2     # V it regulates the 12 V side to
+    PHASE = 180.0           # s engine off, then s engine on, alternately
     K_LV = 0.0005           # V per A*s on the pretend 12 V battery
     K_HV = 0.0002           # V per A*s on the pretend 48 V battery
-    GAIN = 200.0            # A per V of error when regulating the 12 V side
+    GAIN = 200.0            # A per V of error when regulating a voltage
     PERIODS = {nc.ID_ELECTRIC: 0.010, nc.ID_PARAMETER: 0.050, nc.ID_VERSION: 0.100}
 
-    def __init__(self):
+    def __init__(self, engine=True):
         self._lock = threading.Lock()
+        self.engine = engine
         self.lv, self.hv, self.temp = 12.9, 51.2, 30.0
         self.lv_i = self.hv_i = 0.0
-        self.mode, self.auto_active, self.precharge = 0x2, False, 0x2
+        self.mode, self.auto_state, self.precharge = 0x2, 'standby', 0x2
         self.ctrl, self.ctrl_time, self.can_loss_until = None, 0.0, 0.0
         now = time.monotonic()
+        self._start = now
         self._due = dict.fromkeys(self.PERIODS, now)
         self._last_step = now
 
@@ -564,44 +703,61 @@ class SimulatedD1:
     def close(self):
         pass
 
+    def engine_running(self, now):
+        return self.engine and int((now - self._start) // self.PHASE) % 2 == 1
+
+    def external(self, now):
+        """Net current into the 12 V battery from everything but the D1."""
+        if self.engine_running(now):
+            return max(0.0, min(self.ALTERNATOR, (self.ALTERNATOR_V - self.lv) * self.GAIN)) - self.LOAD
+        return -self.LOAD
+
     def step(self, now):
         dt = min(max(now - self._last_step, 0.0), 1.0)
         self._last_step = now
         if self.ctrl is not None and now - self.ctrl_time > self.CONTROL_TIMEOUT:
             self.ctrl, self.can_loss_until = None, now + 10.0   # commands stopped
         buck_ok = 41.0 <= self.hv <= 58.0
+        external = self.external(now)
         lv_i = hv_i = 0.0
         if self.ctrl is not None:
             c = self.ctrl
             limit, target = c['current_limit'] or 0, c['voltage_setpoint'] or 0.0
             if c['direction'] == nc.DIRECTION_BUCK and buck_ok:
                 self.mode = 0x4
-                lv_i = max(0.0, min(limit, self.LOAD + (target - self.lv) * self.GAIN))
+                lv_i = max(0.0, min(limit, -external + (target - self.lv) * self.GAIN))
             elif c['direction'] == nc.DIRECTION_BOOST and self.lv >= 12.3:
                 self.mode = 0x3
                 hv_i = max(0.0, min(limit, (target - self.hv) * 10))
             else:
                 self.mode = 0x2
             self.precharge = 0x1 if c['precharge'] else 0x2
-            self.auto_active = False
+            self.auto_state = 'standby'
         else:
             self.precharge = 0x2
-            if self.auto_active and (self.lv > 13.5 or not buck_ok):
-                self.auto_active = False
-            elif not self.auto_active and self.lv < 12.5 and buck_ok:
-                self.auto_active = True
-            if self.auto_active:
-                self.mode = 0x5
-                lv_i = max(0.0, min(178.0, self.LOAD + (13.4 - self.lv) * self.GAIN))
-            else:
-                self.mode = 0x2
+            s = self.auto_state
+            if s == 'buck' and (self.lv > 13.5 or not buck_ok):
+                s = 'standby'
+            elif s == 'boost' and self.lv < 12.3:
+                s = 'standby'
+            elif s == 'standby':
+                if self.lv < 12.5 and buck_ok:
+                    s = 'buck'
+                elif 13.5 <= self.lv <= 16.0:
+                    s = 'boost'
+            self.auto_state = s
+            if s == 'buck':   # factory limits: 13.4 V, up to 178 A
+                lv_i = max(0.0, min(178.0, -external + (13.4 - self.lv) * self.GAIN))
+            elif s == 'boost':   # factory limits: about 58 V, up to 57 A on the 48 V side
+                hv_i = max(0.0, min(57.0, (58.0 - self.hv) * 10))
+            self.mode = 0x2 if s == 'standby' else 0x5
         # positive current = into that side's battery
         if lv_i > 0:
             hv_i = -(self.lv * lv_i) / (self.hv * 0.94)
         elif hv_i > 0:
             lv_i = -(self.hv * hv_i) / (self.lv * 0.92)
         self.lv_i, self.hv_i = lv_i, hv_i
-        self.lv = max(11.0, min(15.0, self.lv + (lv_i - self.LOAD) * self.K_LV * dt))
+        self.lv = max(11.0, min(15.0, self.lv + (lv_i + external) * self.K_LV * dt))
         self.hv = max(44.0, min(57.5, self.hv + hv_i * self.K_HV * dt))
         target_temp = 30.0 + abs(self.lv * lv_i) / 100.0
         self.temp += (target_temp - self.temp) * dt / 60.0
@@ -655,7 +811,7 @@ def tx_worker(bus, controller, stats):
         frame = controller.frame()
         stats.last_frame = frame or b''
         try:
-            if frame is not None:   # None = automatic: the D1 runs on its own logic
+            if frame is not None:   # None = hands-off automatic: the D1 runs on its own logic
                 if bus.send(nc.ID_CTRL, frame) is not False:   # False: auto, port not found yet
                     stats.sent += 1
         except OSError as e:
@@ -845,7 +1001,7 @@ class DbusService:
                      '/Nomadic/PrechargeStatus', '/Nomadic/PrechargeStatusText',
                      '/Nomadic/LoadStatus', '/Nomadic/FaultStatus', '/Nomadic/VoltageStatus',
                      '/Nomadic/Faults', '/Nomadic/Alarms', '/Nomadic/SoftwareVersion',
-                     '/Nomadic/Control/SentDirection'):
+                     '/Nomadic/Control/SentDirection', '/Nomadic/Control/AutoReason'):
             svc.add_path(path, None)
         for path in self.CONTROL_PATHS:
             svc.add_path(path, None, writeable=True, onchangecallback=self._on_control)
@@ -989,6 +1145,7 @@ class DbusService:
 
         s['/Mode'] = 4 if ctrl['direction'] == nc.DIRECTION_OFF else 1
         s['/Nomadic/Control/SentDirection'] = ctrl['sent_direction']
+        s['/Nomadic/Control/AutoReason'] = ctrl['auto_reason']
         for path, field in self.control_paths.items():
             value = ctrl[field]
             value = int(value) if isinstance(value, bool) else value
@@ -1269,8 +1426,10 @@ def run_scan(configured, seconds=3.0):
     elif not found and wrong_speed:
         name, bitrate = wrong_speed[0]
         other = {250000: '500', 500000: '250'}.get(bitrate, 'other')
+        profile = {'250': 'VE.Can (250 kbit/s)', '500': 'CAN-bus BMS LV (500 kbit/s)'}.get(
+            other, 'the other speed')
         print('Something is talking on %s at a different speed. On the Cerbo, set that port\'s CAN-bus '
-              'profile to "Up, but no services (%s kbit/s)" and run this again.' % (name, other))
+              'profile to "%s" and run this again.' % (name, profile))
     elif not found:
         print('The converter was not heard on any port. Check that the D1 has KL30 and KL15 (12 V), '
               'the cable, the 120 ohm terminators, and try the other speed (250 or 500 kbit/s).')
@@ -1327,6 +1486,7 @@ def main():
     log.info('Nomadic DC-DC driver %s starting on %s', VERSION, interface)
     controller = Controller(cfg, os.path.join(BASE_DIR, files[0]))
     telemetry = Telemetry(timeout)
+    controller.telemetry = telemetry
     tx_stats = TxStats()
     watcher = StatusWatcher(interface)
 
