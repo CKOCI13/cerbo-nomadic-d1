@@ -2,6 +2,11 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## Documentation update 2 (2026-10-25, driver unchanged)
+
+- **Plain-language pass** for the README, Installation Guide and Safe Test Plan: long sentences split up, the troubleshooting checklist made into a numbered list, and new glossary entries (lever connector, current limit, Automatic with limits).
+- **New test, `tests/test_spec_conformance.py`:** checks the driver independently against Nomadic's CAN interface document, the Rev D manual and Victron's USB install script.
+
 ## Documentation update (2026-10-25, driver unchanged)
 
 - **Cable: no CAN ground wire.** The Cerbo and the D1 already share the van's negative, and the Cerbo's VE.Can 2 port isn't isolated, so the white/green wire (RJ45 pin 3) is now left unused and insulated. The guide adds a one-time check of the voltage between the Cerbo's negative and the D1's GND.
