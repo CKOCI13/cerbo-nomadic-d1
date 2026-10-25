@@ -226,8 +226,10 @@ Over MQTT, publish `{"value": 13.2}` to `W/<portal-id>/dcdc/<device_instance>/No
   runs on its own logic. It buck-converts when the 12 V side is below 12.5 V (with the 48 V side at 41–58 V), and
   boost-converts when the 12 V side is 13.5–16 V, until it falls below 12.3 V. `startup = off` or `last` change
   this. Set-points are remembered (in `state.json`). The precharge request always starts off.
-* The default limits are the D1 manual's adjustable ranges: buck target 10–13.5 V, boost target 42–57.8 V,
-  buck current 0–178 A, boost current 0–57 A. Tighten them to your batteries, wiring and fuses.
+* The default voltage limits are the D1 manual's adjustable ranges: buck target 10–13.5 V, boost target
+  42–57.8 V. The default current limits suit a stock Grand Design LTV1 (2 AWG, 150 A fuse): buck 0–120 A,
+  boost 0–23 A (48 V side, about 118 A on the 12 V side at worst). The D1 itself allows 178 A and 57 A; only
+  raise them if your cable and fuses are sized for it.
 * Every command, whatever it comes from, is checked against the limits in `config.ini` and rejected if it
   falls outside them.
 * Changing between buck and boost always holds OFF for `direction_change_delay` seconds (1 s by default) first.
@@ -238,7 +240,7 @@ Over MQTT, publish `{"value": 13.2}` to `W/<portal-id>/dcdc/<device_instance>/No
   then goes back to its autonomous logic (the CAN spec lists a "CAN Loss" fault and an "Autonomous mode") or holds
   the last command. Switching from Off/Buck/Boost back to Automatic works the same way: the frames stop. Test both
   ([Installation Guide](../docs/installation-guide.pdf), "Test the hand-back") before relying on Off/Buck/Boost. If the D1 holds the last command,
-  switching KL15 off and on restarts its controller.
+  switching KL15 off and on restarts its controller (if KL15 is joined to KL30, as on the LTV1, pull that wire's fuse for a few seconds).
 
 ## Testing safely
 

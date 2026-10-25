@@ -82,8 +82,8 @@ class DbusTest(unittest.TestCase):
         so = '/SwitchableOutput/'
         self.assertEqual(driver.DIRECTION_LABELS[self.svc[so + 'direction/Dimming']], 'Automatic')
         self.assertEqual(self.svc[so + 'buck_voltage/Settings/DimmingMax'], 13.5)
-        self.assertEqual(self.svc[so + 'buck_current_limit/Settings/DimmingMax'], 178)
-        self.assertEqual(self.svc[so + 'boost_current_limit/Settings/DimmingMax'], 57)
+        self.assertEqual(self.svc[so + 'buck_current_limit/Settings/DimmingMax'], 120)
+        self.assertEqual(self.svc[so + 'boost_current_limit/Settings/DimmingMax'], 23)
         self.assertEqual(self.svc[so + 'buck_voltage/Settings/Group'], 'DC-DC D1 settings')
         self.assertIsNone(self.svc[so + 'direction/Settings/Group'])
         # precharge is hidden by default (the D1 manual doesn't use it)

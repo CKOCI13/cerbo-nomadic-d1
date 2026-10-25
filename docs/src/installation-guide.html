@@ -188,7 +188,7 @@ profile to "CAN-bus BMS LV (500 kbit/s)" and run this again.</pre>
   <tr><td><code>startup = auto</code></td><td>Leave as auto: after every Cerbo restart the D1 runs on its own logic</td></tr>
   <tr><td><code>boost_voltage = 55.2</code></td><td>The 48 V target used when you choose Boost. Set it to your 48 V battery's charge voltage</td></tr>
   <tr><td><code>buck_voltage = 13.5</code></td><td>The 12 V target used when you choose Buck. 13.5 V charges the chassis batteries properly (it's also the D1's maximum)</td></tr>
-  <tr><td><code>buck_current_limit</code>, <code>boost_current_limit</code></td><td>The output current used for Buck (D1 max 178 A) and Boost (D1 max 57 A). Keep them within your wiring and fuses. <b>Boost is counted on the 48 V side:</b> the 12 V side then carries up to about 5 times as many amps (30 A boost &asymp; 154 A on the 12 V cable at worst; see <i>Limiting current</i> in README.md)</td></tr>
+  <tr><td><code>buck_current_limit</code>, <code>boost_current_limit</code></td><td>The output current used for Buck (D1 max 178 A) and Boost (D1 max 57 A). Keep them within your wiring and fuses. <b>Boost is counted on the 48 V side:</b> the 12 V side then carries up to about 5 times as many amps (30 A boost &asymp; 154 A on the 12 V cable at worst; see <i>Limiting current</i> in README.md). The maximums are preset for a stock LTV1 (2 AWG, 150 A fuse): 120 A buck, 23 A boost</td></tr>
   <tr><td><code>..._min</code> / <code>..._max</code> lines</td><td>Safety limits. They're preset to the D1 manual's ranges; tighten them if your batteries, cables or fuses need it</td></tr>
   <tr><td><code>custom_name = DC-DC D1</code></td><td>The name shown on the Cerbo and in VRM</td></tr>
   <tr><td><code>password =</code></td><td>Optional: a password for the web page</td></tr></table>Nobody can set a value outside the limits, whether from the Cerbo screen, VRM or the web page.</div></div>
@@ -267,7 +267,7 @@ its own logic when the Cerbo stops sending commands, or keeps following the last
 <div class="step"><div class="id">T2</div><div>Choose <b>Automatic</b>. Within a few seconds Status should show what the D1 does on its own: <b>Autonomous</b>, <b>Standby</b> (12 V side 12.5–13.5 V), <b>Buck</b> (below 12.5 V) or <b>Boost</b> (13.5–16 V).</div></div>
 <div class="step"><div class="id">T3</div><div>Choose <b>Buck</b> again, then unplug the CAN cable at the Cerbo. With a meter on the D1's 12 V terminals, watch whether the D1 keeps regulating to 13.5 V, stops, or goes back to its own logic (about 13.4 V). Plug the cable back in.</div></div>
 <div class="panel amber">If the D1 seems stuck on the last command (for example it stays in Standby in Automatic while the 12 V side is below 12.5 V),
-switch KL15 off and on to restart its controller, and tell Nomadic what you saw. Until you know how it behaves, leave the Cerbo in Automatic.</div>
+switch KL15 off and on to restart its controller (if KL15 is joined to KL30, as on the LTV1, pull that wire's fuse for a few seconds), and tell Nomadic what you saw. Until you know how it behaves, leave the Cerbo in Automatic.</div>
 
 <h2><span class="num">?</span>Troubleshooting</h2>
 <table>

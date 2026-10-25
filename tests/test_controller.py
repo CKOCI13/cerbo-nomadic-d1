@@ -42,7 +42,7 @@ class ControllerTest(unittest.TestCase):
         f = nc.decode_ctrl(self.c.frame())
         self.assertEqual(f['direction'], 2)
         self.assertTrue(near(f['voltage_setpoint'], 55.2))
-        self.assertEqual(f['current_limit'], 30)
+        self.assertEqual(f['current_limit'], 20)
 
     def test_reversing_always_passes_through_off(self):
         self.c.update({'direction': 1})
@@ -69,7 +69,7 @@ class ControllerTest(unittest.TestCase):
     def test_refuses_values_outside_the_limits(self):
         bad_changes = [
             {'buck_voltage': 13.6}, {'buck_voltage': 9.9}, {'boost_voltage': 57.9},
-            {'boost_voltage': 41.9}, {'buck_current_limit': 179}, {'boost_current_limit': 58},
+            {'boost_voltage': 41.9}, {'buck_current_limit': 121}, {'boost_current_limit': 24},
             {'boost_current_limit': 10.5}, {'precharge_voltage': 60}, {'direction': 3},
             {'direction': -2}, {'direction': '1'}, {'precharge': 2}, {'buck_voltage': 'abc'},
             {'buck_voltage': float('nan')}, {'current_limit': 10}, {},
@@ -82,10 +82,10 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(self.c.snapshot()['buck_voltage'], 13.5)   # nothing changed
 
     def test_settings_are_saved_but_startup_is_automatic(self):
-        self.c.update({'buck_voltage': 13.2, 'buck_current_limit': 178, 'direction': 0,
+        self.c.update({'buck_voltage': 13.2, 'buck_current_limit': 120, 'direction': 0,
                        'precharge': True})
         saved = json.load(open(self.state))
-        self.assertEqual(saved['buck_current_limit'], 178)
+        self.assertEqual(saved['buck_current_limit'], 120)
         restarted = driver.Controller(self.cfg, self.state).snapshot()
         self.assertEqual(restarted['direction'], driver.DIRECTION_AUTO)
         self.assertEqual(restarted['buck_voltage'], 13.2)
