@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nomadic D1 DC-DC Converter Driver - Safe Test Plan</title>
+<link rel="stylesheet" href="print.css">
+</head>
+<body>
+<div class="kicker">Safe test plan · control edition v1.4</div>
+<h1>Testing the D1 on the Cerbo,<br>one safe step at a time</h1>
+<div class="rule"></div>
+<p>Each stage only adds a little risk, and only after the stage before it has passed. Stages 1–4 can't change what the D1 does at all,
+because the Cerbo sends it nothing. Stop at the first thing that looks wrong.</p>
+
+<div class="panel blue"><b>Two kinds of Automatic.</b> The shipped <code>config.ini</code> has <code>automatic = limited</code>: in Automatic the
+Cerbo chooses buck, boost or standby itself, by the D1 manual's rules, and sends your current limits with it. That is what owners use every day.
+For stages 3–5, set <code>automatic = hands_off</code> instead: then Automatic sends nothing and the D1 runs on its own logic, exactly as without
+a Cerbo. Stage 6 switches to <code>limited</code> and tests it.</div>
+
+
+<div class="cols">
+  <div class="panel blue"><h3>What protects you</h3><ul>
+    <li>The D1 itself: it stops on 12 V side over 16–18 V or under 8 V, 48 V side over 58–60 V or under 24 V, over 213 A, a short, or a board temperature over 120 °C (D1 manual)</li>
+    <li>Your BMS and fuses on HV+, LV+ and KL30</li>
+    <li>The driver's limits in config.ini, and the test timer</li>
+    <li><b>KL15: your emergency stop.</b> KL15 off shuts the D1's controller down immediately, whatever the Cerbo is doing. If KL15 is joined to KL30 on one wire (as on the LTV1), pulling that wire's fuse does the same</li></ul></div>
+  <div class="panel green"><h3>Before you start</h3><ul>
+    <li>Fuses on HV+ and LV+, 3 A on KL30 and 1 A on KL15 (D1 manual Rev D; one 3 A fuse if they share a wire)</li>
+    <li>KL15 through a switch you can reach (or a fuse you can pull)</li>
+    <li>A multimeter, plus a DC clamp meter if you have one</li>
+    <li>Know your batteries' maximum charge voltages (12 V chassis and 48 V)</li>
+    <li>The Cerbo's battery monitor in view (48 V current)</li>
+    <li>The values on your D1's label: Nomadic can configure each unit differently</li></ul></div>
+</div>
+
+<table>
+  <tr><th style="width:12%">Stage</th><th>What</th><th>Risk</th></tr>
+  <tr><td>1</td><td>Simulation on the Cerbo</td><td>None: no converter, nothing sent on CAN</td></tr>
+  <tr><td>2</td><td>Wiring check, everything off</td><td>None: no power</td></tr>
+  <tr><td>3</td><td>Listen only</td><td>None: the Cerbo sends nothing</td></tr>
+  <tr><td>4</td><td>Installed in Automatic (hands off)</td><td>None: the Cerbo sends nothing, and the D1 works as before</td></tr>
+  <tr><td>5</td><td>First commands with guard rails</td><td>Low: small limits, 5-minute timer, KL15 switch in hand</td></tr>
+  <tr><td>6</td><td>Automatic with limits</td><td>Low: small limits, KL15 switch in hand</td></tr>
+  <tr><td>7</td><td>Normal use</td><td>Only after stages 5 and 6 pass</td></tr>
+</table>
+
+<h2 class="page"><span class="num">1</span>Simulation: no converter at all</h2>
+<p>In Cerbo Setup, choose <b>9</b>. The real driver runs on your Cerbo against a pretend D1, and no CAN socket is ever opened. A real installation keeps running beside it.</p>
+<table class="check"><tr><th>Check</th><th>OK</th></tr>
+  <tr><td>"DC-DC D1 (SIMULATED)" appears in the Cerbo's switch pane, and in VRM's Switches</td><td></td></tr>
+  <tr><td>Its web page opens at <b>http://&lt;Cerbo IP&gt;:8089</b></td><td></td></tr>
+  <tr><td>In Automatic (with limits) the pretend 12 V side slowly drops. Below 12.5 V, Status changes to Buck and it charges back to about 13.4 V, at no more than your Buck current limit. When the pretend engine starts (every 3 minutes) it switches to Boost; the web page says why each time</td><td></td></tr>
+  <tr><td>Buck: Status changes to Buck and the 12 V side climbs to your Buck voltage (13.5 V). Off: the current goes to zero</td><td></td></tr>
+  <tr><td>Boost: the 48 V side rises a little, the 12 V side drops, and boost stops at 12.3 V</td><td></td></tr>
+  <tr><td>Change the set-points and limits: values outside config.ini are refused</td><td></td></tr>
+</table>
+<p>Stop with Ctrl+C. The simulated device disappears. The pretend D1 follows the manual's logic, but it can't tell you how the real one reacts to commands. That's what stage 5 is for.</p>
+
+<h2><span class="num">2</span>Wiring check, everything off</h2>
+<table class="check"><tr><th>Check</th><th>OK</th></tr>
+  <tr><td>Everything off: the KL30/KL15 fuse pulled, and the fuses on LV+ and HV+ open</td><td></td></tr>
+  <tr><td>Continuity: RJ45 pin 7 to white/brown, pin 8 to brown, pin 3 to white/green (guide step 2b)</td><td></td></tr>
+  <tr><td>No continuity (no beep) between any of the three network-cable wires and LV+ or HV+</td><td></td></tr>
+  <tr><td>CAN ground (white/green) to the D1 GND terminal: beeps</td><td></td></tr>
+  <tr><td>RJ45 not in the Cerbo: white/brown to brown reads about 120 Ω (your resistor at the D1)</td><td></td></tr>
+  <tr><td>RJ45 in the Cerbo, with the VE.Can terminator in the other socket: about 60 Ω</td><td></td></tr>
+</table>
+
+<h2><span class="num">3</span>Listen only</h2>
+<p>Power the D1 as normal (KL30 and KL15 on). In Cerbo Setup choose <b>2</b> (find), then <b>3</b> (watch). The Cerbo sends nothing.</p>
+<table class="check"><tr><th>Check</th><th>What you saw</th><th>OK</th></tr>
+  <tr><td>Converter found, at the right speed (if it reports bus errors, switch speed as the guide says).</td><td></td><td></td></tr>
+  <tr><td>12 V side reading within about 0.2 V of your meter on the D1's LV+ to GND</td><td></td><td></td></tr>
+  <tr><td>48 V side reading within about 0.5 V of your meter on HV+ to GND</td><td></td><td></td></tr>
+  <tr><td>No alarms, or only alarms that make sense (for example low voltage when the battery really is low)</td><td></td><td></td></tr>
+</table>
+
+<h2><span class="num">4</span>Installed in Automatic (hands off)</h2>
+<p>Choose <b>1</b>, set <code>automatic = hands_off</code>, save, then choose <b>4</b> (install). The driver starts in Automatic and still sends nothing
+(the web page says "Automatic (hands off)"). Leave it running for a day.</p>
+<table class="check"><tr><th>Check</th><th>OK</th></tr>
+  <tr><td>Cards on the Cerbo, in VRM and on the web page, with sensible readings</td><td></td></tr>
+  <tr><td>The D1 behaves exactly as before: buck when the 12 V side is low, standby otherwise</td><td></td></tr>
+</table>
+
+<h2 class="page"><span class="num">5</span>First commands, with guard rails</h2>
+<p>Prepare: in Cerbo Setup choose <b>1</b>, set these test values (keep <code>automatic = hands_off</code>), save, then choose <b>4</b>:</p>
+<table>
+  <tr><th>config.ini line</th><th>Test value</th><th>Why</th></tr>
+  <tr><td><code>test_timer</code></td><td>5</td><td>Buck/Boost switch to Off after 5 minutes</td></tr>
+  <tr><td><code>buck_current_limit_max</code></td><td>20</td><td>Small current while testing</td></tr>
+  <tr><td><code>boost_current_limit_max</code></td><td>10</td><td>Small current while testing</td></tr>
+  <tr><td><code>boost_voltage</code></td><td>Your 48 V battery voltage now + 0.5 V</td><td>Boost can only nudge it</td></tr>
+  <tr><td><code>boost_voltage_max</code></td><td>Your 48 V battery voltage now + 1 V</td><td>Nobody can set more</td></tr>
+</table>
+<p>Conditions: 48 V side between 41 and 58 V; 12 V batteries healthy; someone at the KL15 switch; a meter on the D1's 12 V terminals.
+Do each step, watch for 1–2 minutes, and fill in the table.</p>
+<table class="check">
+  <tr><th style="width:5%">#</th><th style="width:20%">Choose</th><th>Expect</th><th style="width:18%">What you saw</th><th style="width:6%">OK</th></tr>
+  <tr><td>5a</td><td>Off</td><td>Status: Standby/Idle. 12 V current about 0</td><td></td><td></td></tr>
+  <tr><td>5b</td><td>Automatic</td><td>Status: back to the D1's own behaviour within a few seconds</td><td></td><td></td></tr>
+  <tr><td>5c</td><td>Buck (13.5 V, ≤ 20 A)</td><td>Status: Buck. 12 V current ≤ 20 A (check with the clamp meter, and note which way is +). The 12 V side rises toward 13.5 V and never above about 13.7 V</td><td></td><td></td></tr>
+  <tr><td>5d</td><td>Automatic</td><td>Back to the D1's own behaviour</td><td></td><td></td></tr>
+  <tr><td>5e</td><td>Boost (now + 0.5 V, ≤ 10 A)</td><td>Status: Boost. 48 V current ≤ 10 A. The 48 V side rises a little and stops at the target. The 12 V side drops (it's the source). After 5 minutes the test timer switches to Off</td><td></td><td></td></tr>
+  <tr><td>5f</td><td>Automatic</td><td>Back to the D1's own behaviour</td><td></td><td></td></tr>
+  <tr><td>5g</td><td>Buck, then unplug the CAN cable</td><td>The hand-back test (guide Step 6): does the D1 keep going, stop, or return to its own logic? Plug it back in, then choose Automatic</td><td></td><td></td></tr>
+</table>
+<div class="panel red"><b>Stop at once (KL15 off) if:</b> any current goes above the limit you set; any voltage goes above your batteries'
+limits; a red Fault appears; the board temperature climbs fast (above about 80 °C); or anything smells, gets hot or sounds wrong. Then choose
+<b>Off</b> on the Cerbo before you switch KL15 back on. If the D1 then seems stuck on the last command, switch KL15 off and on
+to restart its controller.</div>
+
+<h2 class="page"><span class="num">6</span>Automatic with limits</h2>
+<p>Prepare: choose <b>1</b>, set <code>automatic = limited</code> and keep the small test limits from stage 5, save, then choose <b>4</b>. Choose
+<b>Automatic</b>. The Cerbo now chooses buck, boost or standby by the D1 manual's rules (buck below 12.5 V, boost from 13.5 V until 12.3 V),
+waits 2 seconds before each change, and sends your limits every 10 ms. Keep a clamp meter on the 12 V cable and a hand on the KL15 switch.</p>
+<table class="check">
+  <tr><th style="width:5%">#</th><th style="width:22%">Do</th><th>Expect</th><th style="width:18%">What you saw</th><th style="width:6%">OK</th></tr>
+  <tr><td>6a</td><td>Engine off, 12 V side 12.5–13.5 V</td><td>Status: Standby. Web page: "Automatic with limits: Standby (Off)"</td><td></td><td></td></tr>
+  <tr><td>6b</td><td>Engine off, loads on until the 12 V side is below 12.5 V</td><td>A few seconds later: Buck. 12 V current ≤ 20 A; the 12 V side rises to about 13.4 V and stays there</td><td></td><td></td></tr>
+  <tr><td>6c</td><td>Start the engine</td><td>Once the alternator lifts the 12 V side above 13.5 V: Standby, then Boost after a few more seconds. 48 V current ≤ 10 A; 12 V cable current ≤ about 5 × that</td><td></td><td></td></tr>
+  <tr><td>6d</td><td>Stop the engine while boosting</td><td>Boost continues until the 12 V side falls below 12.3 V, then Off (Buck if it's below 12.5 V). No Boost again for 1 minute</td><td></td><td></td></tr>
+  <tr><td>6e</td><td>All through 6a–6d</td><td>Never straight from Buck to Boost or back without Off between; the clamp meter never above your limit</td><td></td><td></td></tr>
+</table>
+
+<p>Stop at once, as in stage 5, if anything goes wrong.</p>
+
+<h2><span class="num">7</span>Normal use</h2>
+<table class="check"><tr><th>Check</th><th>OK</th></tr>
+  <tr><td>Set <code>test_timer = 0</code>, and set the current limits to what your wiring, fuses, batteries and the D1's label allow (option 1, then 4). Stock LTV1 (2 AWG, 150 A fuse): <code>buck_current_limit_max = 120</code>, <code>boost_current_limit_max = 23</code></td><td></td></tr>
+  <tr><td>Put <code>boost_voltage</code> back to your 48 V battery's charge voltage</td><td></td></tr>
+  <tr><td>Keep <code>automatic = limited</code> and <code>startup = auto</code>, so the Cerbo is in Automatic with limits after every restart</td><td></td></tr>
+  <tr><td>Remember what you saw in 5g: while the Cerbo restarts or updates, the D1 may run on its own logic at its factory limits</td><td></td></tr>
+  <tr><td>Send Nomadic what you saw in 5g, and which way the current sign went in 5c</td><td></td></tr>
+</table>
+<p style="margin-top:18pt">Tested and signed off by: <span class="write" style="min-width:200pt"></span> &nbsp; Date: <span class="write" style="min-width:90pt"></span></p>
+</body>
+</html>

@@ -60,16 +60,17 @@ when you tap **Buck**, it turns that into the code the D1 understands.
 
 ## Who's driving?
 
-| Automatic (the starting setting) | You take the wheel |
+| Automatic (the starting setting) | You pick by hand |
 |---|---|
 | ![The D1's own logic](images/explained-automatic.png) | ![The Cerbo sends orders](images/explained-take-control.png) |
-| The D1 watches the small batteries and decides by itself, **exactly like it does today**. Below 12.5 V it fills them back up (to about 13.4 V). Between 12.5 and 13.5 V it rests. Above 13.5 V it helps the big battery. The Cerbo just watches, and sends nothing. | You pick **Off**, **Buck** (charge the small batteries to, say, 13.5 V) or **Boost**. The Cerbo then repeats that order 100 times a second. Pick **Automatic** again to hand the wheel back. |
+| The Cerbo watches the small batteries and makes **the same choice the D1 makes today**: below 12.5 V it fills them back up (to about 13.4 V), between 12.5 and 13.5 V it rests, and above 13.5 V (engine running) it helps the big battery. The difference: it also tells the D1 **how many amps it may use**, so the 12 V cable and fuse are never overloaded. Nobody has to pick buck or boost. | You pick **Off**, **Buck** (charge the small batteries to, say, 13.5 V) or **Boost**. The Cerbo then repeats that order 100 times a second. Pick **Automatic** again and the Cerbo decides by itself again. |
 
 ### The one thing nobody knows yet
 
-If you've taken the wheel and the orders suddenly stop (the Cerbo restarts, or the cable comes loose), does the
-D1 go back to deciding by itself? Or does it keep doing the last thing it was told? The D1's documents don't say.
-That's why the Cerbo starts in Automatic, and why the [Safe Test Plan](safe-test-plan.pdf) tests this carefully.
+If the orders suddenly stop (the Cerbo restarts, or the cable comes loose), does the D1 go back to deciding by
+itself, at its full factory current? Or does it keep doing the last thing it was told? The D1's documents don't
+say. That's why the [Safe Test Plan](safe-test-plan.pdf) tests this carefully, and why the Cerbo's limits are an
+extra layer, not a replacement for the right fuse.
 
 ## What you'll see
 
@@ -99,14 +100,15 @@ Four things stop anything going badly wrong:
 
 ![Six steps, from a pretend D1 to everyday use](images/explained-testing-steps.png)
 
-You only go up a step when the one you're on worked. On the first four steps the Cerbo sends the D1 nothing,
-so they can't change what it does:
+You only go up a step when the one you're on worked. On the first four steps the Cerbo sends the D1 nothing
+(the plan has you set `automatic = hands_off` for them), so they can't change what it does:
 
 1. **Pretend D1:** the real driver runs on your Cerbo against a make-believe converter. No cable, no risk.
 2. **Check the wires with the power off.** About 60 Ω between the talk wires, and no shorts.
 3. **Just listen.** Do the Cerbo's numbers match your meter?
-4. **Install in Automatic.** Leave it for a day.
+4. **Install, only watching** (`automatic = hands_off`). Leave it for a day.
 5. **First orders, with training wheels:** small limits, a 5-minute timer, and a hand on the wake-up switch.
-6. **Everyday use,** with your real limits.
+6. **Automatic with limits,** still with small limits: start and stop the engine and watch it pick buck and boost.
+7. **Everyday use,** with your real limits.
 
 The full checklist is in the [Safe Test Plan](safe-test-plan.pdf).

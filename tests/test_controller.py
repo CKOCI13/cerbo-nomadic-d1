@@ -25,10 +25,27 @@ class ControllerTest(unittest.TestCase):
         self.state = os.path.join(tempfile.mkdtemp(), 'state.json')
         self.c = driver.Controller(self.cfg, self.state)
 
-    def test_starts_in_automatic_and_sends_nothing(self):
-        self.assertEqual(self.c.snapshot()['direction'], driver.DIRECTION_AUTO)
-        self.assertIsNone(self.c.frame())
-        self.assertIsNone(self.c.snapshot()['sent_direction'])
+    def test_starts_in_automatic_with_limits(self):
+        # automatic = limited (the default): the Cerbo decides, and with no readings yet it sends Off
+        snap = self.c.snapshot()
+        self.assertEqual((snap['direction'], snap['automatic']), (driver.DIRECTION_AUTO, 'limited'))
+        f = nc.decode_ctrl(self.c.frame())
+        self.assertEqual(f['direction'], nc.DIRECTION_OFF)
+        self.assertEqual(f['current_limit'], 100)
+        self.assertEqual(self.c.snapshot()['sent_direction'], nc.DIRECTION_OFF)
+        self.assertIn('no readings', self.c.snapshot()['auto_reason'])
+
+    def test_hands_off_automatic_sends_nothing(self):
+        self.cfg['control']['automatic'] = 'hands_off'
+        c = driver.Controller(self.cfg, self.state)
+        self.assertIsNone(c.frame())
+        self.assertIsNone(c.snapshot()['sent_direction'])
+        self.assertIsNone(c.snapshot()['auto_reason'])
+
+    def test_rejects_an_unknown_automatic_setting(self):
+        self.cfg['control']['automatic'] = 'sometimes'
+        with self.assertRaises(ValueError):
+            driver.Controller(self.cfg, self.state)
 
     def test_buck_and_boost_use_their_own_set_point_and_current_limit(self):
         self.c.update({'direction': nc.DIRECTION_BUCK})
@@ -53,7 +70,7 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(nc.decode_ctrl(self.c.frame())['direction'], 2)
         # Boost -> Automatic -> Buck in quick succession is still held off
         self.c.update({'direction': driver.DIRECTION_AUTO})
-        self.assertIsNone(self.c.frame())
+        self.assertEqual(nc.decode_ctrl(self.c.frame())['direction'], 0)   # no readings: Off
         self.c.update({'direction': 1})
         self.assertEqual(nc.decode_ctrl(self.c.frame())['direction'], 0)
         time.sleep(0.35)

@@ -22,11 +22,11 @@ what the D1 is doing, use the monitor-only edition instead (<code>github.com/CKO
 <div class="cols">
   <div class="panel green"><h3>You'll be able to</h3><ul>
     <li>See LV/HV voltage and current, temperature, status and alarms</li>
-    <li>Leave the D1 on its own Automatic logic, or take control with Off, Buck (48 V to 12 V) or Boost (12 V to 48 V)</li>
+    <li>Run the D1 in Automatic within your current limits, or choose Off, Buck (48 V to 12 V) or Boost (12 V to 48 V) by hand</li>
     <li>Change the voltage targets and current limits</li></ul></div>
   <div class="panel blue"><h3>Good to know</h3><ul>
     <li>It takes about 1 hour, including making the cable</li>
-    <li>Nothing changes until you choose. The Cerbo starts in Automatic, so the D1 keeps working exactly as it does today</li>
+    <li>In Automatic (the default) the Cerbo makes the D1's own buck / boost / standby choices and keeps it within your current limits. Nobody has to choose Buck or Boost</li>
     <li>You don't need to type any commands. The <b>Cerbo Setup</b> helper does it for you</li></ul></div>
 </div>
 
@@ -141,7 +141,7 @@ pin 8 CAN-L, pin 3 GND) and the <i>D1 Bidirectional DC-DC Converter Manual</i>, 
 <h2><span class="num">4</span>Connect everything</h2>
 <div class="step"><div class="id">4a</div><div>Plug the cable's RJ45 plug into the CAN port you chose in 3c, with the VE.Can terminator in the port's other socket (as in step 2h).</div></div>
 <div class="step"><div class="id">4b</div><div>Plug the D1's signal plug back in and switch its 12 V supply (KL30/KL15) back on.</div></div>
-<div class="panel green" style="margin-top:8pt">Nothing changes for the D1 yet. The Cerbo only listens until you finish Step 5, and even after that it starts in <b>Automatic</b> (it sends no commands).</div>
+<div class="panel green" style="margin-top:8pt">Nothing changes for the D1 yet. The Cerbo only listens until you finish Step 5. After installing, it starts in <b>Automatic with limits</b>: it makes the D1's own buck / boost / standby choices and sends your current limits. To install it so that it only watches, set <code>automatic = hands_off</code> in step 5d (the Safe Test Plan does this for its first stages).</div>
 
 <!-- ======================================================================= 5 -->
 <h2 class="page"><span class="num">5</span>Install the driver with Cerbo Setup</h2>
@@ -185,7 +185,8 @@ profile to "CAN-bus BMS LV (500 kbit/s)" and run this again.</pre>
 <div class="step"><div class="id">5d</div><div><b>Type <code>1</code>: edit the settings.</b> Notepad opens <code>config.ini</code>. Check these lines, then press Ctrl+S to save and close Notepad:
   <table><tr><th>Line</th><th>What to put</th></tr>
   <tr><td><code>interface = auto</code></td><td>Leave as auto: the driver finds the D1's CAN port by itself</td></tr>
-  <tr><td><code>startup = auto</code></td><td>Leave as auto: after every Cerbo restart the D1 runs on its own logic</td></tr>
+  <tr><td><code>startup = auto</code></td><td>Leave as auto: after every Cerbo restart it's in Automatic</td></tr>
+  <tr><td><code>automatic = limited</code></td><td>Leave as limited: in Automatic the Cerbo makes the D1's own buck / boost choices and keeps it within your current limits. (<code>hands_off</code>: Automatic sends nothing)</td></tr>
   <tr><td><code>boost_voltage = 55.2</code></td><td>The 48 V target used when you choose Boost. Set it to your 48 V battery's charge voltage</td></tr>
   <tr><td><code>buck_voltage = 13.5</code></td><td>The 12 V target used when you choose Buck. 13.5 V charges the chassis batteries properly (it's also the D1's maximum)</td></tr>
   <tr><td><code>buck_current_limit</code>, <code>boost_current_limit</code></td><td>The output current used for Buck (D1 max 178 A) and Boost (D1 max 57 A). Keep them within your wiring and fuses. <b>Boost is counted on the 48 V side:</b> the 12 V side then carries up to about 5 times as many amps (30 A boost &asymp; 154 A on the 12 V cable at worst; see <i>Limiting current</i> in README.md). The maximums are preset for a stock LTV1 (2 AWG, 150 A fuse): 120 A buck, 23 A boost</td></tr>
@@ -200,9 +201,9 @@ Alarms: none
 Software 1.2.3  Hardware 5</pre>
 <div class="step"><div class="id">5f</div><div><b>Type <code>4</code>: install.</b> After about 10 seconds you should see:</div></div>
 <pre>/service/dbus-nomadic-dcdc: up (pid 1834) 6 seconds
-... INFO: Nomadic DC-DC driver 1.4.1 starting on auto
+... INFO: Nomadic DC-DC driver 1.5.0 starting on auto
 ... INFO: Converter online on can1</pre>
-<p><b>Done!</b> It now starts by itself after every reboot and firmware update, in Automatic, so the D1 keeps working exactly as before.</p>
+<p><b>Done!</b> It now starts by itself after every reboot and firmware update, in Automatic with limits.</p>
 <h3>No network to the Cerbo? Install from a USB stick instead</h3>
 <p>Venus OS can install add-ons from a USB stick or microSD card by itself, with no SSH or password. Do this instead of 5c–5f:</p>
 <div class="step"><div class="id">U1</div><div><b>Get the file.</b> Download <code>venus-data-nomadic-d1.tar.gz</code> from the latest release (<a href="https://github.com/CKOCI13/cerbo-nomadic-d1/releases/latest">https://github.com/CKOCI13/cerbo-nomadic-d1/releases/latest</a>). It has the standard settings, with <code>interface = auto</code>, so there's nothing to edit. To change settings first, edit config.ini (Cerbo Setup option <code>1</code>) and type <code>U</code> to make your own copy of the file. On a Mac, download it with Chrome or Firefox: Safari can unpack it into a <code>.tar</code> file, which the Cerbo ignores.</div></div>
@@ -222,22 +223,22 @@ Software 1.2.3  Hardware 5</pre>
 <img src="../images/cerbo-readings.png" style="width:66%">
 <p class="caption"><b>DC-DC D1</b>: live readings, the alarm and status, and the Direction dropdown.</p>
 <img src="../images/cerbo-settings.png" style="width:66%">
-<p class="caption"><b>DC-DC D1 settings</b>: tap − / + to change a value. It's used whenever the Cerbo is in control (Buck or Boost).</p>
+<p class="caption"><b>DC-DC D1 settings</b>: tap − / + to change a value. It's used whenever the Cerbo is in control (Automatic with limits, Buck or Boost).</p>
 
 <h3>Direction: who's in charge</h3>
 <table>
   <tr><th style="width:24%">Choice</th><th>What happens</th></tr>
-  <tr><td><b>Automatic</b> (default)</td><td>The D1 decides by itself, as it always has. It bucks (charges the 12 V side from 48 V) when the 12 V side drops below 12.5 V, as long as the 48 V side is 41–58 V. It boosts (pushes 12 V energy up to 48 V) when the 12 V side is 13.5–16 V, until it falls below 12.3 V. Between 12.5 and 13.5 V it waits in Standby. The Cerbo sends nothing.</td></tr>
-  <tr><td><b>Buck 48V to 12V</b></td><td>The Cerbo makes the D1 charge the 12 V side, at <b>Buck voltage</b> (13.5 V) and up to <b>Buck current limit</b>. In Automatic the D1 uses its own factory target (about 13.4 V) instead.</td></tr>
+  <tr><td><b>Automatic</b> (default)</td><td>The Cerbo makes the same choice the D1 would make by itself, and sends your current limits with it. It bucks (charges the 12 V side from 48 V, to about 13.4 V) when the 12 V side drops below 12.5 V, as long as the 48 V side is 41–58 V. It boosts (pushes 12 V energy up to 48 V) when the 12 V side is 13.5–16 V, until it falls below 12.3 V. Between 12.5 and 13.5 V it waits in Standby. Each change waits 2 seconds, and boost pauses for a minute after the 12 V side sags. The web page shows what it chose and why. (With <code>automatic = hands_off</code> the Cerbo sends nothing and the D1 decides alone, at its factory limits.)</td></tr>
+  <tr><td><b>Buck 48V to 12V</b></td><td>The Cerbo makes the D1 charge the 12 V side, at <b>Buck voltage</b> (13.5 V) and up to <b>Buck current limit</b>. In Automatic the Cerbo uses about 13.4 V, the D1's own buck target.</td></tr>
   <tr><td><b>Boost 12V to 48V</b></td><td>The Cerbo makes the D1 push energy to the 48 V side, at <b>Boost voltage</b> and up to <b>Boost current limit</b>.</td></tr>
   <tr><td><b>Off</b></td><td>The Cerbo tells the D1 not to convert.</td></tr>
 </table>
-<p>Changing between Buck and Boost always passes through Off for 1 second. Choosing Automatic again hands control back to the D1.
+<p>Changing between Buck and Boost always passes through Off for 1 second. Choosing Automatic again lets the Cerbo choose by itself again.
 The <b>Alarm</b> tile shows the most serious active alarm (red Fault label on a fault), and <b>Status</b> shows what the D1 reports it's doing,
 or <b>No communication</b>. The precharge controls are hidden because the D1 manual doesn't use precharge. To show them, or to rename or
 hide any item, go to <b>Settings › Devices › DC-DC D1</b>.</p>
 
-<div class="panel red"><b>Limiting current to protect fuses and cables.</b> Buck or Boost with a lower current limit can keep the D1 below what a
+<div class="panel red"><b>Limiting current to protect fuses and cables.</b> The Cerbo's current limits (in Automatic, Buck or Boost) keep the D1 below what a
 fuse or cable can take, but only while the Cerbo keeps sending its command every 10 ms. When the commands stop (the Cerbo restarts or updates, the
 driver stops, or the CAN cable comes loose), it isn't yet known what the D1 does; it may go back to full current (up to 178 A into the 12 V side).
 So never fit a bigger fuse than the cable is rated for, size fuses and cables for the D1's maximum or ask Nomadic to lower its own limit, and only
@@ -262,12 +263,12 @@ rely on the Cerbo's limit after the hand-back test below. The project README exp
 
 <h3>Test the hand-back before relying on Off, Buck or Boost</h3>
 <p>The Safe Test Plan (<code>docs/safe-test-plan.pdf</code>) has the full careful version. In short: it isn't known yet whether the D1 goes back to
-its own logic when the Cerbo stops sending commands, or keeps following the last command. Do this test once, with the 48 V side between 41 and 58 V:</p>
+its own logic when the Cerbo stops sending commands, or keeps following the last command. Do this test once, with the 48 V side between 41 and 58 V, and with <code>automatic = hands_off</code> set (option 1, then 4), so that choosing Automatic stops the commands. Set it back to <code>limited</code> afterwards:</p>
 <div class="step"><div class="id">T1</div><div>Choose <b>Buck</b>. Status should change to <b>Buck 48V to 12V</b>.</div></div>
 <div class="step"><div class="id">T2</div><div>Choose <b>Automatic</b>. Within a few seconds Status should show what the D1 does on its own: <b>Autonomous</b>, <b>Standby</b> (12 V side 12.5–13.5 V), <b>Buck</b> (below 12.5 V) or <b>Boost</b> (13.5–16 V).</div></div>
 <div class="step"><div class="id">T3</div><div>Choose <b>Buck</b> again, then unplug the CAN cable at the Cerbo. With a meter on the D1's 12 V terminals, watch whether the D1 keeps regulating to 13.5 V, stops, or goes back to its own logic (about 13.4 V). Plug the cable back in.</div></div>
 <div class="panel amber">If the D1 seems stuck on the last command (for example it stays in Standby in Automatic while the 12 V side is below 12.5 V),
-switch KL15 off and on to restart its controller (if KL15 is joined to KL30, as on the LTV1, pull that wire's fuse for a few seconds), and tell Nomadic what you saw. Until you know how it behaves, leave the Cerbo in Automatic.</div>
+switch KL15 off and on to restart its controller (if KL15 is joined to KL30, as on the LTV1, pull that wire's fuse for a few seconds), and tell Nomadic what you saw. Until you know how it behaves, don't count on the Cerbo's limits while it restarts or updates.</div>
 
 <h2><span class="num">?</span>Troubleshooting</h2>
 <table>
@@ -289,12 +290,12 @@ switch KL15 off and on to restart its controller (if KL15 is joined to KL30, as 
 </table>
 <p><b>To change settings later,</b> open Cerbo Setup, choose 1 to edit config.ini, save, then choose 4. The driver restarts with the new settings.
 Values you change on the screen, in VRM or on the web page are remembered automatically. <b>To remove it,</b> choose 8 and type YES. The D1 carries on in its own automatic mode.</p>
-<div class="panel amber">Before you rely on Buck, Boost or Off, do the hand-back test in Step 6. While it's in control the Cerbo sends a command every 10 ms.
+<div class="panel amber">Before you rely on the Cerbo's limits, do the hand-back test in Step 6. While it's in control (Automatic with limits, Buck, Boost or Off) the Cerbo sends a command every 10 ms.
 If the Cerbo restarts or the cable comes loose, those commands stop, and it isn't yet known whether the D1 then goes back to its own logic.</div>
 <h3>Points to confirm with Nomadic</h3>
 <ul><li>What the D1 does when CAN commands stop: does it go back to its own logic, and after how long? (Your hand-back test will show this too)</li>
 <li>Whether it sends its status even when it isn't receiving commands (the driver assumes it does)</li>
-<li>Reprogramming the factory buck target to 13.5 V, if you want 13.5 V in Automatic as well</li>
+<li>Reprogramming the factory limits and buck target to suit your wiring, so they also hold while the Cerbo restarts</li>
 <li>Which direction counts as positive current in the readings</li></ul>
 
 

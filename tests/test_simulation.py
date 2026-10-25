@@ -26,7 +26,7 @@ def run(sim, t, seconds, ctrl=None, dt=0.05):
 
 class PretendD1Test(unittest.TestCase):
     def setUp(self):
-        self.sim = driver.SimulatedD1()
+        self.sim = driver.SimulatedD1(engine=False)   # loads only: the 12 V side keeps draining
         self.t = self.sim._last_step
 
     def test_automatic_logic_follows_the_manual(self):
@@ -82,12 +82,14 @@ class EndToEndTest(unittest.TestCase):
         cfg['control']['test_timer'] = '0.02'      # 1.2 s
         c = driver.Controller(cfg, os.path.join(tempfile.mkdtemp(), 's.json'))
         telemetry, stats, bus = driver.Telemetry(1.0), driver.TxStats(), driver.SimulatedD1()
+        c.telemetry = telemetry
         driver.start_thread('rx', driver.rx_worker, bus, telemetry)
         driver.start_thread('tx', driver.tx_worker, bus, c, stats)
         time.sleep(0.6)
         s = telemetry.snapshot()
         self.assertTrue(s['online'])
-        self.assertEqual(stats.sent, 0)            # Automatic: nothing sent
+        self.assertGreater(stats.sent, 0)          # Automatic with limits: the Cerbo is in charge
+        self.assertEqual(c.snapshot()['sent_direction'], 0)   # 12.9 V: standby
         c.update({'direction': 1})
         time.sleep(0.5)
         self.assertEqual(telemetry.snapshot()['parameter']['operating_mode'], 0x4)

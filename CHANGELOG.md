@@ -2,8 +2,11 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
-## 1.4.1 (2026-10-25)
+## 1.5.0 (2026-10-25)
 
+- **Automatic with limits** (new default, `automatic = limited`): in Automatic the Cerbo now chooses buck, boost or standby itself, by the D1 manual's own rules (buck below 12.5 V while the 48 V side is 41–58 V, standby to 13.5 V, boost from 13.5 V until 12.3 V), and sends the configured current limits every 10 ms, so owners never pick Buck or Boost and the 12 V cable stays within its limit. Each change waits 2 s (an engine-crank dip is ignored), boost waits 60 s after a low-voltage stop (no buck/boost flapping on a weak alternator), it never asks for buck and boost together or goes straight from one to the other, and it sends Off if the readings stop. The web page and `/Nomadic/Control/AutoReason` say what it chose and why. `automatic = hands_off` keeps the old behaviour (send nothing). New tests (`tests/test_auto_logic.py`) include a 20-minute closed loop against the pretend D1: at most 100 A on the 12 V side, against 263 A with the D1's own logic.
+- **Pretend D1:** now has an engine that starts and stops every 3 minutes, and boosts at its factory limits in hands-off mode.
+- **Safe Test Plan:** stages 3–5 now set `automatic = hands_off`; a new stage 6 tests Automatic with limits. The D1's test plan now has an HTML source and is rebuilt by `docs/src/build.cjs`.
 - **CAN port profile you can actually choose:** the guide said to set the converter's port to *Up, but no services*. Victron's current screen software (gui-v2, Venus OS v3.80+) hides that option and won't let you pick it. The guide, the driver reference and the `--scan` advice now say **VE.Can (250 kbit/s)** or **CAN-bus BMS LV (500 kbit/s)**; the driver reference shows how to set *Up, but no services* over SSH if you want it.
 - **Start-up script fix (USB stick and normal installs):** Venus OS only runs `/data/rc.local` when it is executable, and when another add-on ends that file with `exit 0`, a line added after it never runs. `install.sh` now puts its line before the first top-level `exit`, moves it there if an older version left it after one, and always makes the file executable. New tests cover it, and the USB file was checked against Victron's own `update-data.sh`.
 - **USB file names:** the README and guide now warn that a browser-renamed file such as `... (1).tar.gz` is skipped by the Cerbo (names with spaces don't work) and must be renamed back.

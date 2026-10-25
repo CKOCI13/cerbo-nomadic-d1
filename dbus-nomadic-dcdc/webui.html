@@ -215,8 +215,12 @@ function render(s) {
 
   const c = s.control;
   document.querySelectorAll('[data-dir]').forEach(b => b.classList.toggle('on', +b.dataset.dir === c.direction));
-  let note = c.direction === -1
-    ? 'Automatic: the converter runs on its own built-in logic. The Cerbo sends no commands.'
+  const AUTO_NOW = {0: 'Standby (Off)', 1: 'Buck 48 → 12 V', 2: 'Boost 12 → 48 V'};
+  let note = c.direction === -1 && c.automatic === 'limited'
+    ? 'Automatic with limits: ' + (AUTO_NOW[c.sent_direction] || '…') + ', at most ' +
+      c.buck_current_limit + ' A buck / ' + c.boost_current_limit + ' A boost. ' + (c.auto_reason || '')
+    : c.direction === -1
+    ? 'Automatic (hands off): the converter runs on its own built-in logic at its factory limits. The Cerbo sends no commands.'
     : c.direction > 0 && c.sent_direction === 0
     ? 'Holding OFF for ' + c.direction_change_delay + ' s before reversing direction…' : '';
   if (c.test_timer_left != null) {
