@@ -2,6 +2,12 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.5.1 (2026-10-29)
+
+- **Safe built-in current limits.** If `config.ini` is missing or a limit line is deleted, the driver now falls back to the same limits as the shipped file (buck 120 A, boost 23 A on the 48 V side, for a stock LTV1's 2 AWG cable on a 150 A fuse) instead of the D1's factory 178 A / 57 A. A new test checks that the built-in values match `config.ini`.
+- **Web page is view-only without a password.** Before, with `password` empty (the default), anyone on the van's Wi-Fi could change the mode and limits from the web page. Now the page still shows everything, but its buttons are greyed out and `POST /api/control` is refused (`403`) until a password is set. The Cerbo screen and VRM are unchanged.
+- **Stricter automatic port detection.** `interface = auto` now only accepts a CAN port once it has heard 8-byte frames of both the converter's status (0x066) and readings (0x088), so a stray frame on another bus that happens to use one of those IDs can't make the driver start sending there.
+
 ## Documentation update 2 (2026-10-25, driver unchanged)
 
 - **Plain-language pass** for the README, Installation Guide and Safe Test Plan: long sentences split up, the troubleshooting checklist made into a numbered list, and new glossary entries (lever connector, current limit, Automatic with limits).

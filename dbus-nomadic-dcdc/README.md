@@ -185,8 +185,10 @@ Set `switch_pane = no` in `config.ini` if you don't want any of this on the GX o
 ### Web page
 
 Open `http://<GX-IP>:8088`. It shows live values, alarms, the decoded status bits and the exact 0x018 frame
-being sent, and it has buttons for Automatic / Off / Buck / Boost and inputs for each set-point. Set `password` in
-`config.ini` to require a login. Without a password, **anyone on your network can operate the converter**.
+being sent, and it has buttons for Automatic / Off / Buck / Boost and inputs for each set-point.
+**Without a password the page is view-only:** it shows everything, but its buttons are greyed out and nothing can be
+changed from it. To use the buttons, set `password` in `config.ini` and restart the driver; the page then asks for it
+(any user name). The Cerbo screen and VRM work either way.
 
 ### As a DC-DC converter in the device list
 

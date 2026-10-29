@@ -210,6 +210,17 @@ class ManualTest(unittest.TestCase):
         worst_12v = c.getint('boost_current_limit_max') * 58.0 / (12.3 * 0.92)
         self.assertLessEqual(worst_12v, 120)
 
+    @unittest.skipUnless(CONTROL, 'monitor edition has no limits')
+    def test_built_in_limits_are_as_safe_as_the_shipped_config(self):
+        # Used if config.ini is missing or a line is deleted: must never be the factory 178 A / 57 A.
+        d = driver.DEFAULTS['control']
+        for key in ('buck_current_limit', 'buck_current_limit_max',
+                    'boost_current_limit', 'boost_current_limit_max'):
+            self.assertEqual(int(d[key]), self.cfg['control'].getint(key), key)
+        cfg = driver.load_config('/nonexistent/config.ini')
+        self.assertEqual(cfg['control'].getint('buck_current_limit_max'), 120)
+        self.assertEqual(cfg['control'].getint('boost_current_limit_max'), 23)
+
     @unittest.skipUnless(CONTROL, 'monitor edition never decides anything')
     def test_automatic_thresholds_are_the_manuals(self):
         a = driver.AutoLogic
