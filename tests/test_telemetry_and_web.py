@@ -77,6 +77,7 @@ class WebApiTest(unittest.TestCase):
         st = json.loads(body)
         self.assertEqual(code, 200)
         self.assertTrue(st['online'])
+        self.assertEqual(st['temperature_unit'], 'F')   # no D-Bus here: Fahrenheit
         self.assertEqual(st['alarms'][0], 'CAN loss')   # most serious first
         self.assertEqual(st['control']['limits']['boost_current_limit'], [0, 23])
 

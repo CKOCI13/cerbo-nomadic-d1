@@ -137,6 +137,10 @@
 const $ = id => document.getElementById(id);
 const DIRS = {'-1': 'Automatic', 0: 'Off', 1: 'Buck 48 → 12 V', 2: 'Boost 12 → 48 V'};
 const fmt = (v, d, u) => v == null ? '—' : v.toFixed(d) + ' ' + u;
+// Temperatures arrive in °C; the driver says which unit to show (the Cerbo's own setting).
+let tUnit = 'F';
+const toUnit = c => c == null ? null : tUnit === 'F' ? c * 9 / 5 + 32 : c;
+const tSuffix = () => '°' + tUnit;
 const hex = (v, w) => v == null ? '—' : '0x' + v.toString(16).toUpperCase().padStart(w, '0');
 let last = null;
 
@@ -200,7 +204,8 @@ function render(s) {
   $('hv-v').textContent = fmt(e.hv_voltage, 1, 'V');
   $('hv-i').textContent = fmt(e.hv_current, 0, 'A');
   $('hv-p').textContent = e.hv_voltage == null ? '—' : fmt(e.hv_voltage * e.hv_current, 0, 'W');
-  $('temp').textContent = fmt(e.temperature, 0, '°C');
+  if (s.temperature_unit) tUnit = s.temperature_unit;
+  $('temp').textContent = fmt(toUnit(e.temperature), 0, tSuffix());
 
   const p = s.parameter || {};
   $('mode').textContent = p.operating_mode_text || '—';
