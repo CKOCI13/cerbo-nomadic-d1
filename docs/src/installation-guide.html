@@ -21,7 +21,7 @@ what the D1 is doing, use the monitor-only edition instead (<code>github.com/CKO
 
 <div class="cols">
   <div class="panel green"><h3>You'll be able to</h3><ul>
-    <li>See LV/HV voltage and current, temperature, status and alarms</li>
+    <li>See LV/HV voltage and current, temperature (°F or °C, as set on the Cerbo), status and alarms</li>
     <li>Run the D1 in Automatic within your current limits, or choose Off, Buck (48 V to 12 V) or Boost (12 V to 48 V) by hand</li>
     <li>Change the voltage targets and current limits</li></ul></div>
   <div class="panel blue"><h3>Good to know</h3><ul>
@@ -208,7 +208,7 @@ Alarms: none
 Software 1.2.3  Hardware 5</pre>
 <div class="step"><div class="id">5f</div><div><b>Type <code>4</code>: install.</b> After about 10 seconds you should see:</div></div>
 <pre>/service/dbus-nomadic-dcdc: up (pid 1834) 6 seconds
-... INFO: Nomadic DC-DC driver 1.5.0 starting on auto
+... INFO: Nomadic DC-DC driver 1.5.1 starting on auto
 ... INFO: Converter online on can1</pre>
 <p><b>Done!</b> It now starts by itself after every reboot and firmware update, in Automatic with limits.</p>
 <h3>No network to the Cerbo? Install from a USB stick instead</h3>

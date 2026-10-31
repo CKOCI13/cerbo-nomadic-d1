@@ -2,6 +2,12 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.5.1 (2026-10-31)
+
+- **Fahrenheit.** The web page now shows the converter temperature in the unit set on the Cerbo (**Settings → General → Display & Appearance → Data units → Temperature**), the same unit the Cerbo screen and VRM already used for it. Choose Fahrenheit there for °F. The live reading, the temperature chart and the history table all follow it, and a change on the Cerbo shows on the page within about 10 seconds. To force one unit on the page, set `temperature_unit = fahrenheit` or `celsius` in the `[web]` part of `config.ini`. The default is `auto`. On a PC (`--simulate` or `--no-dbus`) the page shows °F.
+- **Docs in °F first:** the Safe Test Plan's limits (248 °F / 120 °C shutdown, about 176 °F / 80 °C to stop a test), the worked example in "How it works" and the Cerbo pictures now give Fahrenheit. The installation guide and the driver reference say where to choose the unit.
+- New tests: `tests/test_temperature_unit.py`.
+
 ## Documentation update 2 (2026-10-25, driver unchanged)
 
 - **Plain-language pass** for the README, Installation Guide and Safe Test Plan: long sentences split up, the troubleshooting checklist made into a numbered list, and new glossary entries (lever connector, current limit, Automatic with limits).

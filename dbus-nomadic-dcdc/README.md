@@ -165,7 +165,7 @@ from the device page if you need them.
 | | Direction | Dropdown: **Automatic** (the Cerbo decides, within your limits) / Off / Buck 48V to 12V / Boost 12V to 48V |
 | | Status | The converter's operating mode, or "No communication" |
 | | LV voltage, LV current, HV voltage, HV current | Live readings |
-| | Temperature | Power board temperature, in your GX temperature unit |
+| | Temperature | Power board temperature, in your GX temperature unit (°F or °C, see below) |
 | | Precharge status *(hidden)* | In progress / Not active |
 | **DC-DC D1 settings** | Buck voltage | LV set-point used in buck (number box) |
 | | Buck current limit | LV-side output current limit used in buck |
@@ -188,6 +188,8 @@ Open `http://<GX-IP>:8088`. It shows live values, alarms, the decoded status bit
 being sent, and it has buttons for Automatic / Off / Buck / Boost and inputs for each set-point. Set `password` in
 `config.ini` to require a login. Without a password, **anyone on your network can operate the converter**.
 
+**Fahrenheit or Celsius:** the Cerbo screen, VRM and the web page all show the temperature in the unit set on the Cerbo, at **Settings → General → Display & Appearance → Data units → Temperature**. Choose **Fahrenheit** there for °F. `temperature_unit` in the `[web]` part of `config.ini` can force the web page to `fahrenheit` or `celsius` instead; on a PC (`--simulate` or `--no-dbus`) the page shows °F.
+
 ### As a DC-DC converter in the device list
 
 The driver also registers as a standard DC-DC converter named `custom_name` (default "DC-DC D1"). Output
@@ -206,7 +208,7 @@ Service: `com.victronenergy.dcdc.nomadic_<interface>` (`nomadic_auto` with the d
 |---|---|
 | `/Dc/0/Voltage`, `/Dc/0/Current`, `/Dc/0/Power` | LV side (V, A, W) |
 | `/Dc/In/V`, `/Dc/In/I`, `/Dc/In/P` | HV side (V, A, W) |
-| `/Dc/0/Temperature` | Power board temperature (°C) |
+| `/Dc/0/Temperature` | Power board temperature (°C; the GX screen and VRM convert it to your unit) |
 | `/State` | 0 off, 2 fault, 11 regulating, 245 starting |
 | `/Mode` (writable) | 1 on, 4 off |
 | `/Nomadic/Online` | 1 while frames are arriving |
