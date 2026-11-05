@@ -94,3 +94,27 @@ class WebApiTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ViewOnlyWebTest(unittest.TestCase):
+    """Without a password the web page shows everything but changes nothing."""
+
+    def test_no_password_means_view_only(self):
+        cfg = load_config()
+        self.assertEqual(cfg['web']['password'], '')   # the shipped default
+        cfg['web']['port'] = str(free_port())
+        cfg['web']['bind'] = '127.0.0.1'
+        controller = driver.Controller(cfg, os.path.join(tempfile.mkdtemp(), 'state.json'))
+        before = controller.snapshot()['direction']
+        driver.start_web(cfg, driver.WebApp(cfg, controller, driver.Telemetry(60), driver.TxStats()))
+        base = 'http://127.0.0.1:%s/' % cfg['web']['port']
+        time.sleep(0.2)
+        with urllib.request.urlopen(base + 'api/status') as resp:
+            self.assertTrue(json.loads(resp.read())['read_only'])
+        r = urllib.request.Request(base + 'api/control', data=b'{"direction": 1}',
+                                   headers={'Content-Type': 'application/json'})
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(r)
+        self.assertEqual(e.exception.code, 403)
+        self.assertIn(b'view-only', e.exception.read())
+        self.assertEqual(controller.snapshot()['direction'], before)

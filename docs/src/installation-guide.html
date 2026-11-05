@@ -199,7 +199,7 @@ profile to "CAN-bus BMS LV (500 kbit/s)" and run this again.</pre>
   <tr><td><code>buck_current_limit</code>, <code>boost_current_limit</code></td><td>The output current used for Buck (D1 max 178 A) and Boost (D1 max 57 A). Keep them within your wiring and fuses. <b>Boost is counted on the 48 V side.</b> The 12 V cable then carries up to about 5 times as many amps. For example, 30 A of boost can mean about 154 A on the 12 V cable. See <i>Limiting current</i> in README.md. The maximums are preset for a stock LTV1 (2 AWG, 150 A fuse): 120 A buck, 23 A boost</td></tr>
   <tr><td><code>..._min</code> / <code>..._max</code> lines</td><td>Safety limits. They're preset to the D1 manual's ranges; tighten them if your batteries, cables or fuses need it</td></tr>
   <tr><td><code>custom_name = DC-DC D1</code></td><td>The name shown on the Cerbo and in VRM</td></tr>
-  <tr><td><code>password =</code></td><td>Optional: a password for the web page</td></tr></table>Nobody can set a value outside the limits, whether from the Cerbo screen, VRM or the web page.</div></div>
+  <tr><td><code>password =</code></td><td>Optional: a password to unlock the web page's buttons (without one the page is view-only)</td></tr></table>Nobody can set a value outside the limits, whether from the Cerbo screen, VRM or the web page.</div></div>
 <div class="step"><div class="id">5e</div><div><b>Type <code>3</code>: watch the live readings</b> (optional, but a good check). The voltages should match what a meter shows on the D1's terminals. To stop, press Ctrl+C, then type N and press Enter.</div></div>
 <pre>--- can1 10:42:07  ONLINE  0x066=20/s 0x088=100/s 0x520=10/s
 LV  13.4 V  +22 A | HV  51.2 V   +6 A | 35 C
@@ -208,7 +208,7 @@ Alarms: none
 Software 1.2.3  Hardware 5</pre>
 <div class="step"><div class="id">5f</div><div><b>Type <code>4</code>: install.</b> After about 10 seconds you should see:</div></div>
 <pre>/service/dbus-nomadic-dcdc: up (pid 1834) 6 seconds
-... INFO: Nomadic DC-DC driver 1.5.0 starting on auto
+... INFO: Nomadic DC-DC driver 1.5.1 starting on auto
 ... INFO: Converter online on can1</pre>
 <p><b>Done!</b> It now starts by itself after every reboot and firmware update, in Automatic with limits.</p>
 <h3>No network to the Cerbo? Install from a USB stick instead</h3>
@@ -260,8 +260,8 @@ Only rely on the Cerbo's limit after the hand-back test below. The project READM
     <h3>On a web page</h3>
     <p>On any phone, tablet or computer on the same network, open:</p>
     <p style="font-size:13pt"><b>http://&lt;Cerbo IP&gt;:8088</b></p>
-    <p>This page shows everything, including the raw status bits and the exact command being sent. Set a password for it
-    (<code>password =</code> in step 5d). Without one, <b>anyone on your network can operate the converter</b>.</p>
+    <p>This page shows everything, including the raw status bits and the exact command being sent. Without a password
+    it is <b>view-only</b>: nothing can be changed from it. To use its buttons, set a password (<code>password =</code> in step 5d).</p>
   </div>
   <div><img src="../images/vrm-app.png" style="width:40%"><p class="caption">VRM app, Switches widget (illustration)</p></div>
 </div>

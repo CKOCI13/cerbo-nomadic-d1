@@ -42,6 +42,8 @@
   button:hover { border-color: var(--accent); }
   button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
   .seg button { flex: 1 1 140px; padding: 12px; font-weight: 600; }
+  button:disabled, input:disabled { opacity: .6; cursor: not-allowed; }
+  button:disabled:hover { border-color: var(--line); }
   .note { color: var(--muted); font-size: 13px; min-height: 18px; }
   .set { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center;
          padding: 10px 0; border-top: 1px solid var(--line); }
@@ -86,8 +88,11 @@
   </div>
 
   <div class="two">
-    <div class="card">
+    <div class="card" id="control">
       <h2>Control</h2>
+      <div class="note" id="ro-note" style="display:none">View-only: set a password in config.ini
+        (<code>[web] password = ...</code>) and restart the driver to change settings here.
+        The Cerbo screen and VRM still work.</div>
       <div class="seg">
         <button data-dir="-1">Automatic</button>
         <button data-dir="0">Off</button>
@@ -212,6 +217,9 @@ function render(s) {
 
   $('alarms').style.display = s.alarms.length ? 'block' : 'none';
   $('alarm-list').replaceChildren(...s.alarms.map(a => { const li = document.createElement('li'); li.textContent = a; return li; }));
+
+  $('ro-note').style.display = s.read_only ? 'block' : 'none';
+  document.querySelectorAll('#control button, #control input').forEach(el => el.disabled = !!s.read_only);
 
   const c = s.control;
   document.querySelectorAll('[data-dir]').forEach(b => b.classList.toggle('on', +b.dataset.dir === c.direction));
