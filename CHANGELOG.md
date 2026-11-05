@@ -2,6 +2,10 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.5.1 (2026-11-04)
+
+- **Fix: the driver crashed on the Cerbo GX as soon as it opened the CAN port.** The Cerbo runs 32-bit Python, where Python's `socket.CAN_EFF_FLAG` is a negative number, and building the CAN receive filter from it failed with `struct.error: 'I' format requires 0 <= number <= 4294967295`. The service then restarted every few seconds, so the converter never stayed on the Cerbo's screen or in the device list. The driver now uses the fixed values from Linux's `can.h`. The tests ran on 64-bit PCs, where the constant is positive, so they missed it; a new test (`tests/test_can_filter_32bit.py`) builds the filter with the 32-bit value. Found in the first test on real hardware.
+
 ## Documentation update 2 (2026-10-25, driver unchanged)
 
 - **Plain-language pass** for the README, Installation Guide and Safe Test Plan: long sentences split up, the troubleshooting checklist made into a numbered list, and new glossary entries (lever connector, current limit, Automatic with limits).
