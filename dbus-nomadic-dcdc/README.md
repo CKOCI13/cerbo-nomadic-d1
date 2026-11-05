@@ -129,6 +129,8 @@ Edit `config.ini`. At minimum, set:
 * `startup`: `auto` (recommended) puts the Cerbo in Automatic after every restart
 * `automatic`: `limited` (recommended) makes Automatic choose buck / boost / standby by the manual's rules and
   send your current limits; `hands_off` makes Automatic send nothing, so the D1 runs on its own logic
+* `[temperature]`: `warning` (default 100 °C / 212 °F) and `alarm` (105 °C / 221 °F), in °C, for the warnings on
+  the screen and web page; `sensor = no` to leave out the temperature sensor, `sensor_instance` (default 71)
 
 ## 7. Install as a service
 
@@ -161,7 +163,7 @@ from the device page if you need them.
 
 | Card | Item | Shows / does |
 |---|---|---|
-| **DC-DC D1** | Alarm | The most serious active alarm. The header turns red ("Fault") on a fault, and "N active" appears when there are several |
+| **DC-DC D1** | Alarm | The most serious active alarm (the D1's own first, then the driver's temperature warning). The header turns red ("Fault") on a fault or a temperature alarm, and "N active" appears when there are several |
 | | Direction | Dropdown: **Automatic** (the Cerbo decides, within your limits) / Off / Buck 48V to 12V / Boost 12V to 48V |
 | | Status | The converter's operating mode, or "No communication" |
 | | LV voltage, LV current, HV voltage, HV current | Live readings |
@@ -192,6 +194,26 @@ changed from it. To use the buttons, set `password` in `config.ini` and restart 
 
 **Fahrenheit or Celsius:** the Cerbo screen, VRM and the web page all show the temperature in the unit set on the Cerbo, at **Settings → General → Display & Appearance → Data units → Temperature**. Choose **Fahrenheit** there for °F. `temperature_unit` in the `[web]` part of `config.ini` can force the web page to `fahrenheit` or `celsius` instead; on a PC (`--simulate` or `--no-dbus`) the page shows °F.
 
+### Temperature
+
+The D1 reports its **internal power-board** temperature. From the D1 manual (Rev D, section IV.B): full output up to 105 °C (221 °F),
+current derated in a straight line from 100 % to 0 % between 105 and 120 °C (221–248 °F), conversion stopped with a
+fault above 120 °C. A D1 boosting about 1.7 kW read 82 °C (180 °F) in the first real test, so readings around there
+are normal.
+
+| Where | How |
+|---|---|
+| Levels › Environment, device list, Brief page centre, relay temperature control, VRM | A second service, `com.victronenergy.temperature.nomadic_<interface>` (device instance `sensor_instance`, default 71), named `custom_name`, type **Water heater**: the only GX gauge scale (0–100 °C, 32–212 °F) that takes in a working converter; Generic stops at 60 °C (140 °F). The type can be changed on its page and is kept |
+| Switch pane, VRM Switches | The Temperature item; the Alarm item names the driver's warning or alarm after the D1's own alarms |
+| Web page | The reading, OK / Warning / Alarm, the message in Active alarms |
+| Device page | Not shown: a DC-DC converter's page would label `/Dc/0/Temperature` "Battery temperature", so it isn't published (it is with `service_class = alternator`, where the GX calls it "Alternator temperature") |
+
+**Warning and alarm.** The D1 doesn't report anything before it derates, so the driver raises its own levels from
+`[temperature] warning` and `alarm` (°C, defaults 100 and 105, i.e. 212 and 221 °F): `/Alarms/HighTemperature` is
+1 (warning) or 2 (alarm), the switch pane's Alarm item names it and the web page shows it. Victron's notification
+system only raises a "High Temperature" notification from that path for alternators, not for DC-DC converters.
+Each level clears 3 °C below where it came on. These levels only change what is shown, never what is sent.
+
 ### As a DC-DC converter in the device list
 
 The driver also registers as a standard DC-DC converter named `custom_name` (default "DC-DC D1"). Output
@@ -210,7 +232,8 @@ Service: `com.victronenergy.dcdc.nomadic_<interface>` (`nomadic_auto` with the d
 |---|---|
 | `/Dc/0/Voltage`, `/Dc/0/Current`, `/Dc/0/Power` | LV side (V, A, W) |
 | `/Dc/In/V`, `/Dc/In/I`, `/Dc/In/P` | HV side (V, A, W) |
-| `/Dc/0/Temperature` | Power board temperature (°C; the GX screen and VRM convert it to your unit) |
+| `/Alarms/HighTemperature` | 0 ok, 1 warning, 2 alarm (from `[temperature]`) |
+| temperature service: `/Temperature`, `/TemperatureType` | Board temperature (°C; the GX converts it to your unit) and sensor type (5 = water heater) |
 | `/State` | 0 off, 2 fault, 11 regulating, 245 starting |
 | `/Mode` (writable) | 1 on, 4 off |
 | `/Nomadic/Online` | 1 while frames are arriving |

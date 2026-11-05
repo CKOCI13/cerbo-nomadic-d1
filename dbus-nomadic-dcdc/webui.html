@@ -82,6 +82,7 @@
     </div>
     <div class="card"><h2>Converter</h2>
       <div class="big" id="temp">—</div>
+      <div class="row"><span>Temperature</span><span id="temp-state">—</span></div>
       <div class="row"><span>Mode</span><span id="mode">—</span></div>
       <div class="row"><span>Precharge</span><span id="prech">—</span></div>
     </div>
@@ -211,6 +212,14 @@ function render(s) {
   $('hv-p').textContent = e.hv_voltage == null ? '—' : fmt(e.hv_voltage * e.hv_current, 0, 'W');
   if (s.temperature_unit) tUnit = s.temperature_unit;
   $('temp').textContent = fmt(toUnit(e.temperature), 0, tSuffix());
+  // The driver's own levels ([temperature] in config.ini) and the converter's derating point
+  const lim = s.temperature_limits || {}, lvl = s.temperature_level || 0;
+  const tShow = c => c == null ? '—' : toUnit(c).toFixed(0) + ' ' + tSuffix();
+  $('temp').style.color = lvl === 2 ? 'var(--bad)' : lvl === 1 ? 'var(--warn)' : '';
+  $('temp-state').textContent = e.temperature == null ? '—' : ['OK', 'Warning', 'Alarm'][lvl];
+  $('temp-state').style.color = $('temp').style.color;
+  $('temp-state').title = 'Warning from ' + tShow(lim.warning) + ', alarm from ' + tShow(lim.alarm)
+    + '. The D1 derates from ' + tShow(lim.derate) + ' and stops above ' + tShow(lim.shutdown) + '.';
 
   const p = s.parameter || {};
   $('mode').textContent = p.operating_mode_text || '—';

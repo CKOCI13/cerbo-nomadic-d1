@@ -2,6 +2,19 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.6.0 (2026-11-05)
+
+- **The D1's temperature on more screens, with warnings.** The D1 now also appears as a **temperature sensor** named "DC-DC D1": a gauge on **Levels › Environment**, an entry in the device list, a choice for the Brief page's centre circle, and an input for a Cerbo relay's temperature control. Its type is **Water heater**, the only gauge scale (32–212 °F) that covers a working converter (a D1 read 180 °F while boosting in the first real test; the Generic gauge stops at 140 °F).
+- **No more "Battery temperature".** The D1's own temperature was published as `/Dc/0/Temperature`, which a DC-DC converter's device page labels "Battery temperature". It's left out of that page now; the sensor, the switch pane and the web page show it.
+- **Warning and alarm.** The converter says nothing until it starts derating, so the driver warns first. Levels from the D1 manual (Rev D, IV.B): full output up to 221 °F (105 °C), derating 221–248 °F, fault above 248 °F (120 °C). Defaults: **warning at 212 °F (100 °C)**, **alarm at 221 °F (105 °C)**, in a new `[temperature]` part of `config.ini`. The switch pane's Alarm item names it ("Temperature high" / "Temperature very high", red at the alarm), `/Alarms/HighTemperature` carries it, and the web page shows the level and a message. Each clears 5 °F (3 °C) below where it came on. Display only: nothing sent to the D1 changes.
+- **Safe Test Plan:** the "stop at once" rule now points at the 212 °F warning instead of 176 °F, since a D1 boosting hard normally reads about 180 °F.
+- Also in this release, from updates that hadn't been merged yet:
+  - **Safe built-in current limits.** If `config.ini` is missing or a limit line is deleted, the driver falls back to the same limits as the shipped file (buck 120 A, boost 23 A on the 48 V side, for a stock LTV1's 2 AWG cable on a 150 A fuse) instead of the D1's factory 178 A / 57 A.
+  - **Web page is view-only without a password.** With `password` empty (the default) the page still shows everything, but its buttons are greyed out and `POST /api/control` is refused (`403`) until a password is set. The Cerbo screen and VRM are unchanged.
+  - **Stricter automatic port detection.** `interface = auto` only accepts a CAN port once it has heard 8-byte frames of both the converter's status (0x066) and readings (0x088), so a stray frame on another bus can't make the driver start sending there.
+  - **Fahrenheit.** The web page shows temperatures in the unit set on the Cerbo (**Settings → General → Display & Appearance → Data units → Temperature**); `temperature_unit = fahrenheit` or `celsius` in `[web]` forces one. Docs give °F first.
+- New tests: `tests/test_temperature_levels.py`, `tests/test_temperature_unit.py`.
+
 ## 1.5.1 (2026-11-04)
 
 - **Fix: the driver crashed on the Cerbo GX as soon as it opened the CAN port.** The Cerbo runs 32-bit Python, where Python's `socket.CAN_EFF_FLAG` is a negative number, and building the CAN receive filter from it failed with `struct.error: 'I' format requires 0 <= number <= 4294967295`. The service then restarted every few seconds, so the converter never stayed on the Cerbo's screen or in the device list. The driver now uses the fixed values from Linux's `can.h`. The tests ran on 64-bit PCs, where the constant is positive, so they missed it; a new test (`tests/test_can_filter_32bit.py`) builds the filter with the 32-bit value. Found in the first test on real hardware.

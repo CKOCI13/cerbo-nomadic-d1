@@ -208,7 +208,7 @@ Alarms: none
 Software 1.2.3  Hardware 5</pre>
 <div class="step"><div class="id">5f</div><div><b>Type <code>4</code>: install.</b> After about 10 seconds you should see:</div></div>
 <pre>/service/dbus-nomadic-dcdc: up (pid 1834) 6 seconds
-... INFO: Nomadic DC-DC driver 1.5.1 starting on auto
+... INFO: Nomadic DC-DC driver 1.6.0 starting on auto
 ... INFO: Converter online on can1</pre>
 <p><b>Done!</b> It now starts by itself after every reboot and firmware update, in Automatic with limits.</p>
 <h3>No network to the Cerbo? Install from a USB stick instead</h3>
@@ -241,9 +241,22 @@ Software 1.2.3  Hardware 5</pre>
   <tr><td><b>Off</b></td><td>The Cerbo tells the D1 not to convert.</td></tr>
 </table>
 <p>Changing between Buck and Boost always passes through Off for 1 second. Choosing Automatic again lets the Cerbo choose by itself again.
-The <b>Alarm</b> tile shows the most serious active alarm (red Fault label on a fault), and <b>Status</b> shows what the D1 reports it's doing,
+The <b>Alarm</b> tile shows the most serious active alarm (red Fault label on a fault or a temperature alarm), and <b>Status</b> shows what the D1 reports it's doing,
 or <b>No communication</b>. The precharge controls are hidden because the D1 manual doesn't use precharge. To show them, or to rename or
 hide any item, go to <b>Settings › Devices › DC-DC D1</b>.</p>
+
+<h3>The D1's temperature</h3>
+<p>The temperature is the D1's <b>internal power board</b>, the same sensor it uses to protect itself. It runs well above the air around it: a D1 read about 180 °F while boosting about 1.7 kW, which is normal.
+Besides the switch-pane card and the web page, the D1 is listed as a <b>temperature sensor</b> named DC-DC D1: a gauge on <b>Levels › Environment</b> (32–212 °F; its type is <b>Water heater</b>, the only type whose scale covers a working converter),
+a choice for the Brief page's centre circle (Settings › General › Display &amp; Appearance › Brief page › Center details), and an input for a Cerbo relay set to the <b>Temperature</b> function.</p>
+<table>
+  <tr><th>Board temperature</th><th>D1 (D1 manual Rev D, IV.B)</th><th>Cerbo</th></tr>
+  <tr><td>up to 212 °F (100 °C)</td><td>Full output</td><td>OK</td></tr>
+  <tr><td>212–221 °F (100–105 °C)</td><td>Full output</td><td><b>Warning</b>: Alarm card "Temperature high", web page</td></tr>
+  <tr><td>221–248 °F (105–120 °C)</td><td>Cuts its current back, from 100 % to 0 %; status "Derating (hot)"</td><td><b>Alarm</b>: red Alarm card, web page</td></tr>
+  <tr><td>above 248 °F (120 °C)</td><td>Stops and reports a fault</td><td>The D1's own fault on the Alarm card</td></tr>
+</table>
+<p>The levels are in the <code>[temperature]</code> part of config.ini, in °C. Each clears 5 °F (3 °C) below where it came on. They only change what is shown, never what is sent to the D1.</p>
 
 <div class="panel red"><b>Limiting current to protect fuses and cables.</b> The Cerbo's current limits (in Automatic, Buck or Boost) keep the D1 below what a
 fuse or cable can take, but only while the Cerbo keeps sending its command every 10 ms. The commands stop while the Cerbo restarts or updates, if the
