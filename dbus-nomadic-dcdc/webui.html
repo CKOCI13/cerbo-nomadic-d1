@@ -42,6 +42,8 @@
   button:hover { border-color: var(--accent); }
   button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
   .seg button { flex: 1 1 140px; padding: 12px; font-weight: 600; }
+  button:disabled, input:disabled { opacity: .6; cursor: not-allowed; }
+  button:disabled:hover { border-color: var(--line); }
   .note { color: var(--muted); font-size: 13px; min-height: 18px; }
   .set { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center;
          padding: 10px 0; border-top: 1px solid var(--line); }
@@ -80,14 +82,18 @@
     </div>
     <div class="card"><h2>Converter</h2>
       <div class="big" id="temp">—</div>
+      <div class="row"><span>Temperature</span><span id="temp-state">—</span></div>
       <div class="row"><span>Mode</span><span id="mode">—</span></div>
       <div class="row"><span>Precharge</span><span id="prech">—</span></div>
     </div>
   </div>
 
   <div class="two">
-    <div class="card">
+    <div class="card" id="control">
       <h2>Control</h2>
+      <div class="note" id="ro-note" style="display:none">View-only: set a password in config.ini
+        (<code>[web] password = ...</code>) and restart the driver to change settings here.
+        The Cerbo screen and VRM still work.</div>
       <div class="seg">
         <button data-dir="-1">Automatic</button>
         <button data-dir="0">Off</button>
@@ -137,6 +143,10 @@
 const $ = id => document.getElementById(id);
 const DIRS = {'-1': 'Automatic', 0: 'Off', 1: 'Buck 48 → 12 V', 2: 'Boost 12 → 48 V'};
 const fmt = (v, d, u) => v == null ? '—' : v.toFixed(d) + ' ' + u;
+// Temperatures arrive in °C; the driver says which unit to show (the Cerbo's own setting).
+let tUnit = 'F';
+const toUnit = c => c == null ? null : tUnit === 'F' ? c * 9 / 5 + 32 : c;
+const tSuffix = () => '°' + tUnit;
 const hex = (v, w) => v == null ? '—' : '0x' + v.toString(16).toUpperCase().padStart(w, '0');
 let last = null;
 
@@ -200,7 +210,16 @@ function render(s) {
   $('hv-v').textContent = fmt(e.hv_voltage, 1, 'V');
   $('hv-i').textContent = fmt(e.hv_current, 0, 'A');
   $('hv-p').textContent = e.hv_voltage == null ? '—' : fmt(e.hv_voltage * e.hv_current, 0, 'W');
-  $('temp').textContent = fmt(e.temperature, 0, '°C');
+  if (s.temperature_unit) tUnit = s.temperature_unit;
+  $('temp').textContent = fmt(toUnit(e.temperature), 0, tSuffix());
+  // The driver's own levels ([temperature] in config.ini) and the converter's derating point
+  const lim = s.temperature_limits || {}, lvl = s.temperature_level || 0;
+  const tShow = c => c == null ? '—' : toUnit(c).toFixed(0) + ' ' + tSuffix();
+  $('temp').style.color = lvl === 2 ? 'var(--bad)' : lvl === 1 ? 'var(--warn)' : '';
+  $('temp-state').textContent = e.temperature == null ? '—' : ['OK', 'Warning', 'Alarm'][lvl];
+  $('temp-state').style.color = $('temp').style.color;
+  $('temp-state').title = 'Warning from ' + tShow(lim.warning) + ', alarm from ' + tShow(lim.alarm)
+    + '. The D1 derates from ' + tShow(lim.derate) + ' and stops above ' + tShow(lim.shutdown) + '.';
 
   const p = s.parameter || {};
   $('mode').textContent = p.operating_mode_text || '—';
@@ -212,6 +231,9 @@ function render(s) {
 
   $('alarms').style.display = s.alarms.length ? 'block' : 'none';
   $('alarm-list').replaceChildren(...s.alarms.map(a => { const li = document.createElement('li'); li.textContent = a; return li; }));
+
+  $('ro-note').style.display = s.read_only ? 'block' : 'none';
+  document.querySelectorAll('#control button, #control input').forEach(el => el.disabled = !!s.read_only);
 
   const c = s.control;
   document.querySelectorAll('[data-dir]').forEach(b => b.classList.toggle('on', +b.dataset.dir === c.direction));

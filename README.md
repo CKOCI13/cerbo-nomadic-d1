@@ -67,6 +67,9 @@ New to all this? **[How it works, in plain English](docs/how-it-works.md)** expl
   or standby choice the D1 would make by itself. It also sends your **current limits**, so the 12 V cable and fuse
   are never overloaded. Owners never need to choose Buck or Boost. You can still choose **Off**, **Buck** or
   **Boost** by hand, with your own voltage targets and current limits.
+- **Show its temperature where you look:** the switch pane, a gauge on Levels › Environment (it's also listed as a
+  temperature sensor), VRM and the web page. The D1 doesn't warn before it gets hot enough to cut back its power
+  (221 °F), so the Cerbo does: a warning at 212 °F and an alarm at 221 °F, both adjustable.
 - **Work everywhere Victron does:** the Cerbo's touchscreen, Remote Console, the VRM portal and app, MQTT and Node-RED.
 - **Offer its own web page** at `http://<cerbo-address>:8088`, for any phone or laptop on the same network.
 - **Stay within your limits:** you set the highest and lowest values allowed, and anything outside them is refused.
