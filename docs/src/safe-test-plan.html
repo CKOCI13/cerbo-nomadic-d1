@@ -20,7 +20,7 @@ a Cerbo. Stage 6 switches to <code>limited</code> and tests it.</div>
 
 <div class="cols">
   <div class="panel blue"><h3>What protects you</h3><ul>
-    <li>The D1 protects itself (D1 manual). It stops if the 12 V side goes over 16–18 V or under 8 V, the 48 V side goes over 58–60 V or under 24 V, the current goes over 213 A, there's a short, or it gets hotter than 120 °C inside</li>
+    <li>The D1 protects itself (D1 manual). It stops if the 12 V side goes over 16–18 V or under 8 V, the 48 V side goes over 58–60 V or under 24 V, the current goes over 213 A, there's a short, or it gets hotter than 248 °F (120 °C) inside</li>
     <li>Your BMS and fuses on HV+, LV+ and KL30</li>
     <li>The driver's limits in config.ini, and the test timer</li>
     <li><b>KL15: your emergency stop.</b> KL15 off shuts the D1's controller down immediately, whatever the Cerbo is doing. If KL15 is joined to KL30 on one wire (as on the LTV1), pulling that wire's fuse does the same</li></ul></div>
@@ -106,7 +106,7 @@ Do each step, watch for 1–2 minutes, and fill in the table.</p>
   <tr><td>5g</td><td>Buck, then unplug the CAN cable</td><td>The hand-back test (guide Step 6): does the D1 keep going, stop, or return to its own logic? Plug it back in, then choose Automatic</td><td></td><td></td></tr>
 </table>
 <div class="panel red"><b>Stop at once (KL15 off) if:</b> any current goes above the limit you set; any voltage goes above your batteries'
-limits; a red Fault appears; the board temperature climbs fast (above about 80 °C); or anything smells, gets hot or sounds wrong. Then choose
+limits; a red Fault appears; the board temperature climbs fast (above about 176 °F / 80 °C); or anything smells, gets hot or sounds wrong. Then choose
 <b>Off</b> on the Cerbo before you switch KL15 back on. If the D1 then seems stuck on the last command, switch KL15 off and on
 to restart its controller.</div>
 

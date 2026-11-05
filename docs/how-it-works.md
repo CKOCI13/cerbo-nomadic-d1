@@ -57,7 +57,7 @@ Your **Cerbo GX** is the screen for your whole power system. Right now it can't 
 ![The D1's code is translated into readings, and your choices are translated into code](images/explained-translator.png)
 
 The D1 sends short coded messages about 130 times a second. For example, the eight numbers
-`44 44 E0 07 D0 53 00 00` mean *12 V side 13.6 V and 20 A, 48 V side 51.2 V, temperature 35 °C*.
+`44 44 E0 07 D0 53 00 00` mean *12 V side 13.6 V and 20 A, 48 V side 51.2 V, temperature 95 °F (35 °C)*.
 The Cerbo can't understand that by itself. The driver translates it, and works in the other direction too:
 when you tap **Buck**, it turns that into the code the D1 understands.
 
