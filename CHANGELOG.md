@@ -2,6 +2,10 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.6.1 (2026-11-05)
+
+- **Precharge status reads "Not used"** instead of "Reserved" (the CAN document's name for the 0 the D1 sends, as it doesn't use precharge), on the switch pane, VRM and the web page.
+
 ## 1.6.0 (2026-11-05)
 
 - **The D1's temperature on more screens, with warnings.** The D1 now also appears as a **temperature sensor** named "DC-DC D1": a gauge on **Levels › Environment**, an entry in the device list, a choice for the Brief page's centre circle, and an input for a Cerbo relay's temperature control. Its type is **Water heater**, the only gauge scale (32–212 °F) that covers a working converter (a D1 read 180 °F while boosting in the first real test; the Generic gauge stops at 140 °F).

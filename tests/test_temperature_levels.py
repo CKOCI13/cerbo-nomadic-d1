@@ -146,6 +146,13 @@ class GxScreensTest(unittest.TestCase):
         self.assertEqual(self.c.snapshot(), before)
 
 
+class PrechargeLabelTest(unittest.TestCase):
+    def test_zero_reads_not_used(self):
+        # 0 is "Reserved" in the CAN document; the converter sends it because precharge isn't used
+        self.assertEqual(driver.PRECHARGE_LABELS[0], 'Not used')
+        self.assertEqual(nc.PRECHARGE_STATUSES[0], 'Not used')
+
+
 class WebPageTest(unittest.TestCase):
     def test_status_carries_the_level_and_message(self):
         cfg = load_config()
