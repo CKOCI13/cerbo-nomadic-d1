@@ -35,7 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import nomadic_can as nc
 
-VERSION = '1.6.0'
+VERSION = '1.6.1'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VELIB_PATHS = (
     os.path.join(BASE_DIR, 'ext', 'velib_python'),
@@ -911,7 +911,8 @@ NO_COMMUNICATION = 16   # extra entry after the 16 operating modes
 SHORT_MODES = {0x1: 'Starting up', 0x2: 'Standby', 0x3: 'Boost 12V to 48V', 0x4: 'Buck 48V to 12V',
                0x5: 'Autonomous', 0x7: 'Shutting down', 0x8: 'Derating (hot)', 0xF: 'Invalid'}
 MODE_LABELS = [SHORT_MODES.get(m, 'Reserved') for m in range(16)] + ['No communication']
-PRECHARGE_LABELS = ['Reserved', 'In progress', 'Not active', 'Invalid']
+# 0 is "Reserved" in the CAN document; the D1/D2 send it because they don't use precharge.
+PRECHARGE_LABELS = ['Not used', 'In progress', 'Not active', 'Invalid']
 # After the D1's own alarms: the driver's temperature levels ([temperature] in config.ini)
 TEMP_ALARM_LABELS = ['Temperature high (warning)', 'Temperature very high (alarm)']
 ALARM_LABELS = ['None'] + [text for _, _, text in nc.ALARMS] + TEMP_ALARM_LABELS
