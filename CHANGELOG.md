@@ -2,6 +2,17 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.7.0 (2026-11-09)
+
+- **Command timing.** The D1 expects the Cerbo's control command every 10 ms, and nobody had measured whether a busy Cerbo actually keeps that up. The driver now does:
+  - **Cerbo device card:** "Command gap (worst, 1 min)" in ms (should be about 10) and "Late commands (1 min)", the commands that came more than 20 ms after the one before (should be 0).
+  - **Web page (Details):** commands per second (should be 100), worst gap in the last minute, late commands in the last minute and since start, gaps over 100 ms and the worst gap since start.
+  - **D-Bus / MQTT / Node-RED:** `/Nomadic/Tx/Sent`, `Errors`, `Rate`, `WorstGap`, `LateLastMinute`, `Late`, `LongGaps`, `WorstGapEver`.
+  - **Log:** a warning when a gap is over 100 ms, at most once a minute.
+- A pause in sending (hands-off automatic, port not found yet, send errors) isn't counted as a gap.
+- Display only: what is sent to the D1, and when, is unchanged. The figures give a baseline for a Cerbo GX MK2, to compare with the faster Cerbo GX MK3.
+- New tests: `tests/test_tx_timing.py`.
+
 ## 1.6.1 (2026-11-05)
 
 - **Precharge status reads "Not used"** instead of "Reserved" (the CAN document's name for the 0 the D1 sends, as it doesn't use precharge), on the switch pane, VRM and the web page.

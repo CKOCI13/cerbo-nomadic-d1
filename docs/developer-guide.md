@@ -90,6 +90,11 @@ must stay self-contained. That's also why the tests live outside it.
   `os._exit(1)`, so the service supervisor restarts the driver cleanly a second later.
 - Expected transient CAN errors (`ENOBUFS`, `EAGAIN`, `ENETDOWN`: typically nothing acknowledging on the bus)
   are counted and logged at most every 30 seconds instead.
+- **Command timing (`TxStats`).** `tx_worker()` calls `TxStats.sent_frame()` after each frame it sends and
+  `paused()` when it sends nothing, so a pause never counts as a gap. `TxStats` keeps one bucket per second
+  (frames, worst gap, gaps over 20 ms) for the last 60 s plus since-start counters, behind its own lock;
+  `timing()` returns them for D-Bus (`/Nomadic/Tx/*`, two switch-pane inputs) and the web API (`tx.timing`).
+  Gaps over 100 ms are logged at most once a minute. The tests are in `tests/test_tx_timing.py`.
 
 ## The CAN messages
 
@@ -177,8 +182,8 @@ restored after a restart.
 2. **Its own paths** under `/Nomadic/*`: raw status bitfields, alarm texts and writable controls. These are for
    MQTT and Node-RED.
 3. **Switch-pane items**, using Victron's [switch API](https://github.com/victronenergy/venus/wiki/dbus#switch):
-   - `/GenericInput/<item>` holds the **read-only values**: alarm, status, voltages, currents, temperature and
-     precharge status.
+   - `/GenericInput/<item>` holds the **read-only values**: alarm, status, voltages, currents, temperature,
+     precharge status, and the command timing (worst gap and late commands in the last minute).
    - `/SwitchableOutput/<item>` holds the **controls**: the direction dropdown, number boxes for the set-points
      and limits, and the precharge toggle.
 
