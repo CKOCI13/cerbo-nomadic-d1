@@ -134,6 +134,10 @@
       <div class="row"><span>Last 0x066 / 0x088 / 0x520</span><span id="ages">—</span></div>
       <div class="row"><span>Sending 0x018</span><code id="tx">—</code></div>
       <div class="row"><span>Frames sent / failed</span><span id="txn">—</span></div>
+      <div class="row"><span>Commands per second (should be 100)</span><span id="tx-rate">—</span></div>
+      <div class="row"><span>Worst gap, last minute (should be 10 ms)</span><span id="tx-gap">—</span></div>
+      <div class="row"><span>Late commands, last minute / since start</span><span id="tx-late">—</span></div>
+      <div class="row"><span>Gaps over 100 ms / worst since start</span><span id="tx-long">—</span></div>
       <div class="row"><span>Driver</span><span id="drv">—</span></div>
     </div>
   </div>
@@ -265,6 +269,13 @@ function render(s) {
   $('ages').textContent = ['0x066', '0x088', '0x520'].map(age).join(' / ');
   $('tx').textContent = s.tx.frame || 'nothing (automatic)';
   $('txn').textContent = s.tx.sent + ' / ' + s.tx.errors;
+  const tm = s.tx.timing || {};
+  const n = x => x == null ? '—' : String(x);
+  const ms = x => x == null ? '—' : x + ' ms';
+  $('tx-rate').textContent = n(tm.rate);
+  $('tx-gap').textContent = ms(tm.worst_gap_ms);
+  $('tx-late').textContent = n(tm.late_last_minute) + ' / ' + n(tm.late);
+  $('tx-long').textContent = n(tm.long) + ' / ' + ms(tm.worst_gap_ever_ms);
   $('drv').textContent = s.driver_version;
 }
 

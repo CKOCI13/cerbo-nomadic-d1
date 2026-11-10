@@ -17,6 +17,7 @@ Usage:
 
 import argparse
 import base64
+import collections
 import configparser
 import errno
 import hmac
@@ -35,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import nomadic_can as nc
 
-VERSION = '1.6.1'
+VERSION = '1.7.0'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VELIB_PATHS = (
     os.path.join(BASE_DIR, 'ext', 'velib_python'),
@@ -808,12 +809,77 @@ def simulation_config(cfg):
         cfg['web']['port'] = str(cfg['web'].getint('port') + 1)
 
 
+LATE_GAP = 0.020        # s between two commands: one or more 10 ms slots were missed
+LONG_GAP = 0.100        # s: ten slots missed in a row
+TIMING_WINDOW = 60      # s covered by the "last minute" figures
+
+
 class TxStats:
+    """What the TX thread sent, and how evenly: the gap between consecutive control frames.
+
+    The D1 expects EMS_DCDC_CTRL every 10 ms. Python on a busy Cerbo can be late (the D-Bus,
+    GUI and VRM work all share the processor), so this measures it instead of guessing. Gaps
+    only count between two frames that were both sent: a pause (hands-off automatic, port not
+    found yet, send errors) restarts the measurement rather than counting as one long gap."""
+
     def __init__(self):
         self.sent = 0
         self.errors = 0
         self.last_frame = b''
         self.last_warning = 0.0
+        self.late = 0               # gaps over LATE_GAP since the driver started
+        self.long = 0               # gaps over LONG_GAP since the driver started
+        self.worst_ever = None      # s, longest gap since the driver started
+        self.last_long_warning = 0.0
+        self._last_sent = None
+        self._buckets = collections.deque()   # [second, frames, worst gap, late gaps]
+        self._lock = threading.Lock()
+
+    def sent_frame(self, now):
+        """Record one control frame sent at `now` (time.monotonic())."""
+        gap = None if self._last_sent is None else now - self._last_sent
+        self._last_sent = now
+        with self._lock:
+            self.sent += 1
+            second = int(now)
+            if not self._buckets or self._buckets[-1][0] != second:
+                self._buckets.append([second, 0, 0.0, 0])
+                while self._buckets and self._buckets[0][0] <= second - TIMING_WINDOW:
+                    self._buckets.popleft()
+            b = self._buckets[-1]
+            b[1] += 1
+            if gap is not None:
+                b[2] = max(b[2], gap)
+                if gap > LATE_GAP:
+                    b[3] += 1
+                    self.late += 1
+                if gap > LONG_GAP:
+                    self.long += 1
+                if self.worst_ever is None or gap > self.worst_ever:
+                    self.worst_ever = gap
+        return gap
+
+    def paused(self):
+        """Nothing was sent this cycle: the next gap starts afresh."""
+        self._last_sent = None
+
+    def timing(self, now=None):
+        """Figures for the screens: last-minute and since-start, gaps in milliseconds."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            recent = [b for b in self._buckets if b[0] > int(now) - TIMING_WINDOW]
+            # The current second is still filling, so the rate counts whole seconds only.
+            whole = [b for b in recent if b[0] < int(now)]
+            frames = sum(b[1] for b in whole)
+            return {
+                # frames per second over the whole seconds since the first one in the window
+                'rate': round(frames / (int(now) - whole[0][0]), 1) if whole else None,
+                'worst_gap_ms': round(max(b[2] for b in recent) * 1000) if recent else None,
+                'late_last_minute': sum(b[3] for b in recent),
+                'late': self.late,
+                'long': self.long,
+                'worst_gap_ever_ms': None if self.worst_ever is None else round(self.worst_ever * 1000),
+            }
 
 
 def rx_worker(bus, telemetry):
@@ -835,10 +901,10 @@ def tx_worker(bus, controller, stats):
     while True:
         frame = controller.frame()
         stats.last_frame = frame or b''
+        sent = False
         try:
             if frame is not None:   # None = hands-off automatic: the D1 runs on its own logic
-                if bus.send(nc.ID_CTRL, frame) is not False:   # False: auto, port not found yet
-                    stats.sent += 1
+                sent = bus.send(nc.ID_CTRL, frame) is not False   # False: auto, port not found yet
         except OSError as e:
             if e.errno not in CanBus.TRANSIENT:
                 raise
@@ -849,6 +915,15 @@ def tx_worker(bus, controller, stats):
                 log.warning('CAN send failed (%s), %d frames not sent so far. Is the converter '
                             'connected and powered, with the same bitrate as %s?',
                             os.strerror(e.errno), stats.errors, bus.interface)
+        if sent:
+            now = time.monotonic()
+            gap = stats.sent_frame(now)
+            if gap is not None and gap > LONG_GAP and now - stats.last_long_warning > 60:
+                stats.last_long_warning = now
+                log.warning('Control command late: %.0f ms since the last one (should be 10 ms); '
+                            '%d gaps over 100 ms so far', gap * 1000, stats.long)
+        else:
+            stats.paused()
         next_time += TX_PERIOD
         delay = next_time - time.monotonic()
         if delay > 0:
@@ -928,6 +1003,9 @@ INPUTS = (
     ('hv_current', 'HV current', INPUT_VALUE, 'A', 0, None),
     ('temperature', 'Temperature', INPUT_VALUE, '/Temperature', 0, None),
     ('precharge_status', 'Precharge status', INPUT_DISCRETE, None, None, PRECHARGE_LABELS),
+    # How evenly the Cerbo sends its 10 ms control command (see TxStats).
+    ('command_gap', 'Command gap (worst, 1 min)', INPUT_VALUE, 'ms', 0, None),
+    ('late_commands', 'Late commands (1 min)', INPUT_VALUE, None, 0, None),
 )
 # The D1 manual doesn't use precharge, so its items start hidden (show them from the device page).
 HIDDEN_BY_DEFAULT = ('precharge_status', 'precharge', 'precharge_voltage')
@@ -1057,6 +1135,7 @@ class DbusService:
         self.controller = controller
         self.ui = ui_settings
         self.temp = temperature_watch or TemperatureWatch(cfg)
+        self.tx_stats = None   # set by main(): the TX thread's timing figures
         self.control_paths = dict(self.CONTROL_PATHS)
         self.path_offsets = {}   # path value = field value + offset
         d = cfg['dbus']
@@ -1104,7 +1183,10 @@ class DbusService:
                      '/Nomadic/PrechargeStatus', '/Nomadic/PrechargeStatusText',
                      '/Nomadic/LoadStatus', '/Nomadic/FaultStatus', '/Nomadic/VoltageStatus',
                      '/Nomadic/Faults', '/Nomadic/Alarms', '/Nomadic/SoftwareVersion',
-                     '/Nomadic/Control/SentDirection', '/Nomadic/Control/AutoReason'):
+                     '/Nomadic/Control/SentDirection', '/Nomadic/Control/AutoReason',
+                     '/Nomadic/Tx/Sent', '/Nomadic/Tx/Errors', '/Nomadic/Tx/Rate',
+                     '/Nomadic/Tx/WorstGap', '/Nomadic/Tx/LateLastMinute', '/Nomadic/Tx/Late',
+                     '/Nomadic/Tx/LongGaps', '/Nomadic/Tx/WorstGapEver'):
             svc.add_path(path, None)
         for path in self.CONTROL_PATHS:
             svc.add_path(path, None, writeable=True, onchangecallback=self._on_control)
@@ -1257,6 +1339,15 @@ class DbusService:
         s['/Mode'] = 4 if ctrl['direction'] == nc.DIRECTION_OFF else 1
         s['/Nomadic/Control/SentDirection'] = ctrl['sent_direction']
         s['/Nomadic/Control/AutoReason'] = ctrl['auto_reason']
+        timing = self._timing()
+        s['/Nomadic/Tx/Sent'] = self.tx_stats and self.tx_stats.sent
+        s['/Nomadic/Tx/Errors'] = self.tx_stats and self.tx_stats.errors
+        s['/Nomadic/Tx/Rate'] = timing['rate']
+        s['/Nomadic/Tx/WorstGap'] = timing['worst_gap_ms']
+        s['/Nomadic/Tx/LateLastMinute'] = timing['late_last_minute']
+        s['/Nomadic/Tx/Late'] = timing['late']
+        s['/Nomadic/Tx/LongGaps'] = timing['long']
+        s['/Nomadic/Tx/WorstGapEver'] = timing['worst_gap_ever_ms']
         for path, field in self.control_paths.items():
             value = ctrl[field]
             value = int(value) if isinstance(value, bool) else value
@@ -1264,6 +1355,14 @@ class DbusService:
 
         if self.switch_pane:
             self._refresh_switch_pane(snap, ctrl)
+            s['/GenericInput/command_gap/Value'] = timing['worst_gap_ms']
+            s['/GenericInput/late_commands/Value'] = timing['late_last_minute']
+
+    def _timing(self):
+        if self.tx_stats is None:
+            return dict.fromkeys(('rate', 'worst_gap_ms', 'late_last_minute', 'late', 'long',
+                                  'worst_gap_ever_ms'))
+        return self.tx_stats.timing()
 
     def _refresh_switch_pane(self, snap, ctrl):
         s = self.svc
@@ -1454,6 +1553,7 @@ class WebApp:
                 'frame': ' '.join('%02X' % b for b in self.tx_stats.last_frame),
                 'sent': self.tx_stats.sent,
                 'errors': self.tx_stats.errors,
+                'timing': self.tx_stats.timing(),
             },
         }
 
@@ -1745,6 +1845,7 @@ def main():
         DBusGMainLoop(set_as_default=True)
         dbus_service = DbusService(cfg, controller,
                                    UiSettings(os.path.join(BASE_DIR, files[1])), temperature_watch)
+        dbus_service.tx_stats = tx_stats
 
     if args.simulate:
         bus = SimulatedD1()

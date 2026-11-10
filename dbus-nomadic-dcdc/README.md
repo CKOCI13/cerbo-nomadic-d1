@@ -169,6 +169,8 @@ from the device page if you need them.
 | | LV voltage, LV current, HV voltage, HV current | Live readings |
 | | Temperature | Power board temperature, in your GX temperature unit (°F or °C, see below) |
 | | Precharge status *(hidden)* | In progress / Not active |
+| | Command gap (worst, 1 min) | Longest time, in ms, between two of the Cerbo's control commands in the last minute. Should be about 10 ms (see [Command timing](#command-timing)) |
+| | Late commands (1 min) | How many commands in the last minute came more than 20 ms after the one before. Should be 0 or close to it |
 | **DC-DC D1 settings** | Buck voltage | LV set-point used in buck (number box) |
 | | Buck current limit | LV-side output current limit used in buck |
 | | Boost voltage | HV set-point used in boost |
@@ -193,6 +195,25 @@ changed from it. To use the buttons, set `password` in `config.ini` and restart 
 (any user name). The Cerbo screen and VRM work either way.
 
 **Fahrenheit or Celsius:** the Cerbo screen, VRM and the web page all show the temperature in the unit set on the Cerbo, at **Settings → General → Display & Appearance → Data units → Temperature**. Choose **Fahrenheit** there for °F. `temperature_unit` in the `[web]` part of `config.ini` can force the web page to `fahrenheit` or `celsius` instead; on a PC (`--simulate` or `--no-dbus`) the page shows °F.
+
+### Command timing
+
+The D1 expects the Cerbo's control command (0x018) every **10 ms**. The Cerbo runs the driver in Python,
+alongside its screen, VRM and every other driver, so a busy Cerbo can be late. The driver measures how evenly it
+actually sends, so you can see whether your Cerbo keeps up (and compare a Cerbo GX MK2 with the faster MK3):
+
+| Figure | Where | Good value |
+|---|---|---|
+| Commands per second | Web page | 100 (98–100 is fine) |
+| Worst gap, last minute | Cerbo device card, web page | about 10 ms; up to 20 ms is harmless |
+| Late commands (over 20 ms), last minute / since start | Cerbo device card (last minute), web page (both) | 0, or a handful after start-up |
+| Gaps over 100 ms / worst gap since start | Web page | 0 / under 100 ms |
+
+Only gaps between two commands that were both sent count: while nothing is sent (`automatic = hands_off`,
+the port not found yet, send errors) the measurement starts again instead of counting one long gap.
+A gap over 100 ms is also written to the driver's log (at most once a minute). What the D1 does when commands
+stop or arrive late isn't documented yet (see [Points to confirm with Nomadic](#points-to-confirm-with-nomadic));
+these figures are for watching, and nothing is changed automatically.
 
 ### Temperature
 
@@ -251,6 +272,10 @@ Service: `com.victronenergy.dcdc.nomadic_<interface>` (`nomadic_auto` with the d
 | `/Nomadic/Control/PrechargeVoltage` (writable) | DCDC_UPRECH_REQ, 24..54 V |
 | `/Nomadic/Control/SentDirection` | Direction actually in the frame: what Automatic chose, 0 during a reversal pause, empty when nothing is sent (`automatic = hands_off`) |
 | `/Nomadic/Control/AutoReason` | In Automatic with limits: why it chose that direction, in words (empty otherwise) |
+| `/Nomadic/Tx/Sent`, `/Nomadic/Tx/Errors` | Control frames sent and failed since the driver started |
+| `/Nomadic/Tx/Rate` | Control frames per second over the last minute (should be 100) |
+| `/Nomadic/Tx/WorstGap`, `/Nomadic/Tx/LateLastMinute` | Longest gap between two control frames (ms) and gaps over 20 ms, both over the last minute |
+| `/Nomadic/Tx/Late`, `/Nomadic/Tx/LongGaps`, `/Nomadic/Tx/WorstGapEver` | Gaps over 20 ms, gaps over 100 ms, and the longest gap (ms), since the driver started |
 | `/GenericInput/<item>/...`, `/SwitchableOutput/<item>/...` | The switch pane items above ([Victron switch API](https://github.com/victronenergy/venus/wiki/dbus#switch)) |
 
 From the GX shell: `dbus -y com.victronenergy.dcdc.nomadic_auto /Nomadic/Control/BuckVoltage SetValue 13.2`.
