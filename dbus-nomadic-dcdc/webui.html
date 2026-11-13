@@ -208,12 +208,16 @@ function render(s) {
   $('online').className = 'pill ' + (s.online ? 'ok' : 'bad');
 
   const e = s.electric || {};
-  $('lv-v').textContent = fmt(e.lv_voltage, 1, 'V');
-  $('lv-i').textContent = fmt(e.lv_current, 0, 'A');
-  $('lv-p').textContent = e.lv_voltage == null ? '—' : fmt(e.lv_voltage * e.lv_current, 0, 'W');
-  $('hv-v').textContent = fmt(e.hv_voltage, 1, 'V');
-  $('hv-i').textContent = fmt(e.hv_current, 0, 'A');
-  $('hv-p').textContent = e.hv_voltage == null ? '—' : fmt(e.hv_voltage * e.hv_current, 0, 'W');
+  // Voltage, current and power averaged like the Cerbo's screens ([dbus] smoothing in config.ini)
+  const a = s.smoothed || e;
+  const pw = side => a[side + '_power'] != null ? a[side + '_power']
+    : a[side + '_voltage'] == null ? null : a[side + '_voltage'] * a[side + '_current'];
+  $('lv-v').textContent = fmt(a.lv_voltage, 1, 'V');
+  $('lv-i').textContent = fmt(a.lv_current, 1, 'A');
+  $('lv-p').textContent = fmt(pw('lv'), 0, 'W');
+  $('hv-v').textContent = fmt(a.hv_voltage, 1, 'V');
+  $('hv-i').textContent = fmt(a.hv_current, 1, 'A');
+  $('hv-p').textContent = fmt(pw('hv'), 0, 'W');
   if (s.temperature_unit) tUnit = s.temperature_unit;
   $('temp').textContent = fmt(toUnit(e.temperature), 0, tSuffix());
   // The driver's own levels ([temperature] in config.ini) and the converter's derating point
