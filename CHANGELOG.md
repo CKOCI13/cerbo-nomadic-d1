@@ -2,6 +2,15 @@
 
 What changed in each version of the driver (`VERSION` in `dbus-nomadic-dcdc/dbus-nomadic-dcdc.py`).
 
+## 1.8.0 (2026-11-13)
+
+- **Steadier readings on the Cerbo.** The D1 reports current in whole amps, so a steady 36.4 A flips between 36 and 37 A and the readings jump by about 55 W at 54 V (seen with the monitor version in a field test on 2026-11-13, engine running, boosting about 2 kW). Voltage, current and power are now **averaged over the last 5 seconds** before the Cerbo shows them: the device page, the switch-pane cards, VRM and the web page. Current is shown with one decimal (36.4 A).
+- **Display only.** The control logic (automatic buck/boost, direction changes), the current limits it sends, alarms and temperature still use every reading as it arrives, so the D1 is controlled exactly as before.
+- New setting `[dbus] smoothing` in `config.ini` (seconds; `0` = off, the latest reading as before). An older `config.ini` without it uses 5.
+- `/api/status` keeps the latest frame under `electric` and adds the averages under `smoothed`.
+- With `service_class = alternator` (Overview tile), the tile can show amps instead of watts: Settings › Display & Appearance › Data units › Electrical power display › **Mixed (AC in watts, DC in amps)**. No driver change is needed for that.
+- New tests: `tests/test_smoothing.py`.
+
 ## 1.7.0 (2026-11-09)
 
 - **Command timing.** The D1 expects the Cerbo's control command every 10 ms, and nobody had measured whether a busy Cerbo actually keeps that up. The driver now does:

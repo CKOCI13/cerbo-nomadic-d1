@@ -36,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import nomadic_can as nc
 
-VERSION = '1.7.0'
+VERSION = '1.8.0'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VELIB_PATHS = (
     os.path.join(BASE_DIR, 'ext', 'velib_python'),
@@ -80,6 +80,7 @@ DEFAULTS = {
         'custom_name': 'DC-DC D1',
         'update_interval': '1.0',
         'switch_pane': 'yes',
+        'smoothing': '5',
     },
     'temperature': {
         'warning': '100',
@@ -437,8 +438,14 @@ class Controller:
 
 # --------------------------------------------------------------------------- telemetry
 
+# Averaged for the Cerbo's screens ([dbus] smoothing): the D1 sends current in whole amps, so a
+# steady 36.4 A flips between 36 and 37 A (about 55 W at 54 V) and the readings jump. Display only:
+# the control logic, limits and alarms always use the latest reading.
+SMOOTH_FIELDS = ('lv_voltage', 'lv_current', 'lv_power', 'hv_voltage', 'hv_current', 'hv_power')
+
+
 class Telemetry:
-    """Latest decoded frames from the converter."""
+    """Latest decoded frames from the converter, plus averages for the Cerbo's screens."""
 
     DECODERS = {
         nc.ID_PARAMETER: nc.decode_parameter,
@@ -446,14 +453,16 @@ class Telemetry:
         nc.ID_VERSION: nc.decode_version,
     }
 
-    def __init__(self, timeout):
+    def __init__(self, timeout, smoothing=0.0):
         self.timeout = timeout
+        self.smoothing = max(0.0, smoothing)   # seconds averaged for display; 0 = off
+        self._window = collections.deque()      # (time, SMOOTH_FIELDS values) within that time
         self._lock = threading.Lock()
         self._latest = {}
         self._counts = dict.fromkeys(nc.RX_IDS, 0)
         self.bad_frames = 0
 
-    def feed(self, can_id, data):
+    def feed(self, can_id, data, now=None):
         decode = self.DECODERS.get(can_id)
         if decode is None:
             return
@@ -461,9 +470,44 @@ class Telemetry:
             self.bad_frames += 1
             return
         value = decode(data)
+        now = time.monotonic() if now is None else now
         with self._lock:
-            self._latest[can_id] = (time.monotonic(), value)
+            self._latest[can_id] = (now, value)
             self._counts[can_id] += 1
+            if can_id == nc.ID_ELECTRIC and self.smoothing:
+                self._window.append((now, (
+                    value['lv_voltage'], value['lv_current'], value['lv_voltage'] * value['lv_current'],
+                    value['hv_voltage'], value['hv_current'], value['hv_voltage'] * value['hv_current'])))
+                self._trim(now)
+
+    def _trim(self, now):
+        start = now - self.smoothing
+        while self._window and self._window[0][0] < start:
+            self._window.popleft()
+
+    def smoothed(self, electric, now=None):
+        """electric with voltage, current and power averaged over the last [dbus] smoothing seconds.
+
+        Adds lv_power / hv_power (the average of V x A). Temperature and everything else stay as the
+        latest reading. None stays None (converter offline). For display only.
+        """
+        if electric is None:
+            return None
+        e = dict(electric)
+        rows = []
+        if self.smoothing:
+            now = time.monotonic() if now is None else now
+            with self._lock:
+                self._trim(now)
+                rows = list(self._window)
+        if not rows:   # off, or nothing recent: the latest reading
+            for side in ('lv', 'hv'):
+                e[side + '_power'] = e[side + '_voltage'] * e[side + '_current']
+            return e
+        n = len(rows)
+        for i, k in enumerate(SMOOTH_FIELDS):
+            e[k] = sum(r[1][i] for r in rows) / n
+        return e
 
     def fresh(self, can_id):
         """The latest decoded value of one message, or None if none arrived within the timeout."""
@@ -488,6 +532,7 @@ class Telemetry:
             'online': parameter is not None or electric is not None,
             'parameter': parameter,
             'electric': electric,
+            'smoothed': self.smoothed(electric, now),
             'version': version,
             'ages': ages,
             'counts': counts,
@@ -998,9 +1043,9 @@ INPUTS = (
     ('alarm', 'Alarm', INPUT_DISCRETE, None, None, ALARM_LABELS),
     ('status', 'Status', INPUT_DISCRETE, None, None, MODE_LABELS),
     ('lv_voltage', 'LV voltage', INPUT_VALUE, 'V', 1, None),
-    ('lv_current', 'LV current', INPUT_VALUE, 'A', 0, None),
+    ('lv_current', 'LV current', INPUT_VALUE, 'A', 1, None),
     ('hv_voltage', 'HV voltage', INPUT_VALUE, 'V', 1, None),
-    ('hv_current', 'HV current', INPUT_VALUE, 'A', 0, None),
+    ('hv_current', 'HV current', INPUT_VALUE, 'A', 1, None),
     ('temperature', 'Temperature', INPUT_VALUE, '/Temperature', 0, None),
     ('precharge_status', 'Precharge status', INPUT_DISCRETE, None, None, PRECHARGE_LABELS),
     # How evenly the Cerbo sends its 10 ms control command (see TxStats).
@@ -1162,7 +1207,7 @@ class DbusService:
         svc.add_path('/HardwareVersion', None)
         svc.add_path('/Connected', 1)
 
-        V, A, W = _text('V', 2), _text('A', 0), _text('W', 0)
+        V, A, W = _text('V', 2), _text('A', 1), _text('W', 0)
         for path, fmt in (('/Dc/0/Voltage', V), ('/Dc/0/Current', A), ('/Dc/0/Power', W),
                           ('/Dc/In/V', V), ('/Dc/In/I', A), ('/Dc/In/P', W)):
             svc.add_path(path, None, gettextcallback=fmt)
@@ -1304,22 +1349,27 @@ class DbusService:
             self.svc['/Mgmt/Connection'] = connection
         s = self.svc
         e, p, v = snap['electric'], snap['parameter'], snap['version']
+        a = snap.get('smoothed', e)   # averaged voltage, current and power ([dbus] smoothing)
 
-        def power(volts, amps):
-            return None if e is None else round(e[volts] * e[amps])
+        def power(side):
+            if a is None:
+                return None
+            if side + '_power' in a:
+                return round(a[side + '_power'])
+            return round(a[side + '_voltage'] * a[side + '_current'])
 
-        s['/Dc/0/Voltage'] = e and e['lv_voltage']
-        s['/Dc/0/Current'] = e and e['lv_current']
-        s['/Dc/0/Power'] = power('lv_voltage', 'lv_current')
+        s['/Dc/0/Voltage'] = a and round(a['lv_voltage'], 2)
+        s['/Dc/0/Current'] = a and round(a['lv_current'], 1)
+        s['/Dc/0/Power'] = power('lv')
         level = self.temp.update(snap)
         if self.publish_temperature:
             s['/Dc/0/Temperature'] = e and e['temperature']
         s['/Alarms/HighTemperature'] = level
         if self.sensor is not None:
             self.sensor.refresh(e and e['temperature'])
-        s['/Dc/In/V'] = e and e['hv_voltage']
-        s['/Dc/In/I'] = e and e['hv_current']
-        s['/Dc/In/P'] = power('hv_voltage', 'hv_current')
+        s['/Dc/In/V'] = a and round(a['hv_voltage'], 2)
+        s['/Dc/In/I'] = a and round(a['hv_current'], 1)
+        s['/Dc/In/P'] = power('hv')
         s['/State'] = victron_state(p)
         s['/FirmwareVersion'] = v and v['software_raw']
         s['/HardwareVersion'] = v and v['hardware']
@@ -1381,8 +1431,10 @@ class DbusService:
         else:
             s['/GenericInput/status/Value'] = p and p['operating_mode']
         s['/GenericInput/status/Status'] = 0 if snap['online'] else 1
-        for channel in ('lv_voltage', 'lv_current', 'hv_voltage', 'hv_current', 'temperature'):
-            s['/GenericInput/%s/Value' % channel] = e and e[channel]
+        a = snap.get('smoothed', e)   # averaged, like /Dc/0 and /Dc/In
+        for channel in ('lv_voltage', 'lv_current', 'hv_voltage', 'hv_current'):
+            s['/GenericInput/%s/Value' % channel] = a and round(a[channel], 2)
+        s['/GenericInput/temperature/Value'] = e and e['temperature']
         s['/GenericInput/precharge_status/Value'] = p and p['precharge_status']
 
         failed = not snap['online'] or (p is not None and p['fault_status'] & 0b110)
@@ -1538,7 +1590,10 @@ class WebApp:
             'read_only': self.read_only,
             'temperature_unit': self.temperature_unit.unit,
             'online': snap['online'],
-            'electric': snap['electric'],
+            'electric': snap['electric'],   # the latest frame
+            # Averaged like the Cerbo's screens ([dbus] smoothing seconds)
+            'smoothing': self.telemetry.smoothing,
+            'smoothed': snap['smoothed'] and {k: round(snap['smoothed'][k], 2) for k in SMOOTH_FIELDS},
             'parameter': snap['parameter'],
             'alarms': alarms,
             'temperature_level': watch.level,
@@ -1831,7 +1886,9 @@ def main():
 
     log.info('Nomadic DC-DC driver %s starting on %s', VERSION, interface)
     controller = Controller(cfg, os.path.join(BASE_DIR, files[0]))
-    telemetry = Telemetry(timeout)
+    telemetry = Telemetry(timeout, cfg['dbus'].getfloat('smoothing'))
+    log.info('Readings on the Cerbo averaged over %g s ([dbus] smoothing); control uses the latest',
+             telemetry.smoothing)
     controller.telemetry = telemetry
     tx_stats = TxStats()
     watcher = StatusWatcher(interface)
